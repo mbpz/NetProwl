@@ -3,12 +3,15 @@ package main
 import (
 	"log"
 	"net"
+
+	"github.com/grandcat/zeroconf"
 )
 
 type Agent struct {
-	config  *Config
-	listener net.Listener
-	devices  map[string]*Device
+	config      *Config
+	listener    net.Listener
+	devices     map[string]*Device
+	mdnsServer  *zeroconf.Server
 }
 
 type Device struct {
@@ -28,5 +31,8 @@ func NewAgent(cfg *Config) *Agent {
 
 func (a *Agent) Start() error {
 	log.Printf("NetProwl Agent starting on :%d", a.config.ListenPort)
+	if err := a.startMdnsBroadcast(); err != nil {
+		log.Printf("mDNS broadcast failed (non-fatal): %v", err)
+	}
 	return nil
 }
