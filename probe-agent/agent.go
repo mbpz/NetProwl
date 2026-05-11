@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 
@@ -33,6 +34,9 @@ func (a *Agent) Start() error {
 	log.Printf("NetProwl Agent starting on :%d", a.config.ListenPort)
 	if err := a.startMdnsBroadcast(); err != nil {
 		log.Printf("mDNS broadcast failed (non-fatal): %v", err)
+	}
+	if err := a.startWebSocketServer(); err != nil {
+		return fmt.Errorf("WebSocket server failed: %w", err)
 	}
 	return nil
 }
