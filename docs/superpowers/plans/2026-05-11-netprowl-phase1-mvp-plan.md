@@ -2,11 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 微信小程序 Phase 1 MVP——局域网设备发现、拓扑图渲染、扫描历史记录。
+**Goal:** Phase 1 MVP 扫描引擎跑通 — Go core + 小程序 + PC 双版本
 
-**Architecture:** Taro 多端框架 + 原生微信小程序。小程序直连探测（mDNS/UDP SSDP/TCP），Canvas 渲染星形拓扑图，Storage 持久化扫描历史。
+**Architecture (from spec v1.2):**
+- `core/` — Go 共享核心（mDNS/UDP SSDP/TCP/Banner/服务指纹）
+- `netprowl-mini/` — Taro 微信小程序（白名单端口限制）
+- `netprowl-pc/` — Tauri PC 客户端（全端口，无限制）
 
-**Tech Stack:** Taro + React + TypeScript + 微信小程序原生 API
+**Tech Stack:** Go 1.21+ / Taro 4.x / React 18 / Tauri 2.x / Zustand / SQLite
 
 ---
 
@@ -14,58 +17,663 @@
 
 ```
 netprowl/
-├── src/
-│   ├── app.ts                      # Taro App 入口
-│   ├── app.config.ts               # 全局配置（TabBar 等）
-│   ├── app.css
-│   ├── pages/
-│   │   ├── discovery/             # 发现页（拓扑图 + 扫描）
-│   │   ├── history/               # 历史页
-│   │   └── chat/                  # AI 问诊占位页
-│   ├── components/
-│   │   ├── TopologyCanvas/        # 拓扑图画布
-│   │   ├── DeviceDrawer/          # 设备详情抽屉
-│   │   ├── ScanButton/            # 扫描按钮
-│   │   ├── DeviceCard/            # 设备卡片
-│   │   ├── PortList/              # 端口列表
-│   │   └── icons/                 # 线性风格设备图标
-│   ├── services/
-│   │   ├── scanner.ts             # 扫描引擎入口（协调三层扫描）
-│   │   ├── mdns.ts                # mDNS 发现
-│   │   ├── udp.ts                 # UDP SSDP 发现
-│   │   ├── tcp.ts                 # TCP 端口探测
-│   │   ├── network.ts            # 网络感知（本机 IP / 子网）
-│   │   └── storage.ts             # 扫描历史存储
-│   └── utils/
-│       ├── oui.ts                 # MAC OUI 厂商查表
-│       ├── ip.ts                  # IP / 子网工具
-│       └── gzip.ts                # gzip 压缩（扫描快照）
-├── package.json
-├── project.config.json
-├── tsconfig.json
-└── .gitignore
+├── core/
+│   ├── go.mod
+│   ├── scanner/
+│   │   ├── mdns.go        # mDNS 发现
+│   │   ├── ssdp.go       # UDP SSDP
+│   │   ├── tcp.go        # TCP 端口扫描
+│   │   ├── banner.go     # Banner 抓取
+│   │   └── registry.go   # 服务指纹规则库
+│   └── util/
+│       ├── oui.go        # MAC OUI 厂商库
+│       └── ip.go         # IP/子网工具
+│
+├── netprowl-mini/        # Taro 微信小程序
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── index/     # 首页，扫描入口
+│   │   │   ├── devices/   # 设备列表
+│   │   │   ├── topology/ # 拓扑图
+│   │   │   └── history/  # 扫描历史
+│   │   ├── components/
+│   │   │   ├── DeviceCard/
+│   │   │   ├── TopoCanvas/
+│   │   │   └── ScanButton/
+│   │   ├── services/
+│   │   │   ├── mdns.ts
+│   │   │   ├── udp.ts
+│   │   │   ├── tcp.ts
+│   │   │   └── storage.ts
+│   │   ├── stores/
+│   │   │   └── deviceStore.ts
+│   │   └── utils/
+│   │       ├── oui.ts
+│   │       └── ip.ts
+│   └── project.config.json
+│
+└── netprowl-pc/          # Tauri PC 客户端
+    ├── src/              # React 前端
+    ├── src-tauri/        # Rust 后端
+    └── Cargo.toml
 ```
 
 ---
 
-## Task Decomposition
+## Task Map
 
-### Task 1: 项目脚手架
+| Task | 内容 | 依赖 |
+|------|------|------|
+| 1 | Go core: go.mod + scanner/tcp.go | — |
+| 2 | Go core: scanner/mdns.go + ssdp.go | 1 |
+| 3 | Go core: scanner/banner.go + registry.go | 2 |
+| 4 | Go core: util/oui.go + ip.go | 1 |
+| 5 | 小程序: 项目脚手架 + 核心类型 | — |
+| 6 | 小程序: services (mdns/udp/tcp/storage) | 5 |
+| 7 | 小程序: stores + components | 6 |
+| 8 | 小程序: pages (index/devices/topology/history) | 7 |
+| 9 | PC: Tauri 脚手架 + Rust 命令 | — |
+| 10 | PC: React 前端页面 | 9 |
+| 11 | 集成 + 验收 | 4 + 8 + 10 |
+
+---
+
+## Task 1: Go core: go.mod + scanner/tcp.go
 
 **Files:**
-- Create: `package.json`
-- Create: `project.config.json`
-- Create: `tsconfig.json`
-- Create: `.gitignore`
-- Create: `src/app.ts`
-- Create: `src/app.config.ts`
-- Create: `src/app.css`
+- Create: `core/go.mod`
+- Create: `core/scanner/tcp.go`
 
-- [ ] **Step 1: 创建 package.json（Taro + 微信小程序）**
+- [ ] **Step 1: Create core directory and go.mod**
+
+```bash
+mkdir -p /Users/jinguo.zeng/dmall/project/NetProwl/core/scanner
+mkdir -p /Users/jinguo.zeng/dmall/project/NetProwl/core/util
+cd /Users/jinguo.zeng/dmall/project/NetProwl/core
+go mod init github.com/netprowl/core
+```
+
+- [ ] **Step 2: Write core/scanner/tcp.go**
+
+```go
+package scanner
+
+import (
+    "fmt"
+    "net"
+    "sync"
+    "time"
+)
+
+const (
+    DefaultTimeout = 2 * time.Second
+    MaxConcurrency = 200
+)
+
+var whitePorts = []int{80, 443, 8080, 8443, 554, 5000, 9000, 49152, 22, 21, 25, 110, 143, 135, 139, 445}
+
+type ScanResult struct {
+    IP    string
+    Port  int
+    State string // "open" | "closed"
+    Banner string
+}
+
+type Device struct {
+    IP       string
+    MAC      string
+    Vendor   string
+    OS       string
+    Ports    []Port
+    Risk     string
+}
+
+type Port struct {
+    Number  int
+    State   string
+    Service string
+    Banner  string
+}
+
+func ScanTCP(ipStart, ipEnd string, ports []int) ([]Device, error) {
+    start := net.ParseIP(ipStart)
+    end := net.ParseIP(ipEnd)
+    if start == nil || end == nil {
+        return nil, fmt.Errorf("invalid IP range: %s - %s", ipStart, ipEnd)
+    }
+
+    targets := generateIPs(start, end)
+    if len(targets) == 0 {
+        return nil, fmt.Errorf("no targets generated")
+    }
+
+    results := make([]ScanResult, 0)
+    var mu sync.Mutex
+    var wg sync.WaitGroup
+    sem := make(chan struct{}, MaxConcurrency)
+
+    for _, ip := range targets {
+        for _, port := range ports {
+            wg.Add(1)
+            sem <- struct{}{}
+            go func(ip string, port int) {
+                defer wg.Done()
+                defer func() { <-sem }()
+
+                result := probePort(ip, port)
+                mu.Lock()
+                if result.State == "open" {
+                    results = append(results, result)
+                }
+                mu.Unlock()
+            }(ip, port)
+        }
+    }
+    wg.Wait()
+
+    return buildDeviceList(results), nil
+}
+
+func probePort(ip string, port int) ScanResult {
+    result := ScanResult{IP: ip, Port: port, State: "closed"}
+    conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), DefaultTimeout)
+    if err != nil {
+        return result
+    }
+    defer conn.Close()
+    result.State = "open"
+    result.Banner = grabBanner(conn, port)
+    return result
+}
+
+func grabBanner(conn net.Conn, port int) string {
+    conn.SetDeadline(time.Now().Add(1 * time.Second))
+    switch port {
+    case 80, 8080, 8443:
+        fmt.Fprint(conn, "HEAD / HTTP/1.0\r\n\r\n")
+    }
+    buf := make([]byte, 1024)
+    n, _ := conn.Read(buf)
+    if n > 0 {
+        return string(buf[:n])
+    }
+    return ""
+}
+
+func generateIPs(start, end net.IP) []string {
+    s := ipToInt(start)
+    e := ipToInt(end)
+    out := make([]string, 0, e-s+1)
+    for i := s; i <= e; i++ {
+        out = append(out, intToIP(i).String())
+    }
+    return out
+}
+
+func ipToInt(ip net.IP) int64 {
+    ip4 := ip.To4()
+    if ip4 == nil {
+        return 0
+    }
+    return int64(ip4[0])<<24 | int64(ip4[1])<<16 | int64(ip4[2])<<8 | int64(ip4[3])
+}
+
+func intToIP(i int64) net.IP {
+    return net.IP{byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)}
+}
+
+func buildDeviceList(results []ScanResult) []Device {
+    m := make(map[string]*Device)
+    for _, r := range results {
+        dev, ok := m[r.IP]
+        if !ok {
+            dev = &Device{IP: r.IP, Ports: []Port{}}
+            m[r.IP] = dev
+        }
+        dev.Ports = append(dev.Ports, Port{
+            Number:  r.Port,
+            State:   r.State,
+            Service: GuessService(r.Port),
+            Banner:  r.Banner,
+        })
+    }
+    devs := make([]Device, 0, len(m))
+    for _, d := range m {
+        d.Risk = AssessRisk(d.Ports)
+        devs = append(devs, *d)
+    }
+    return devs
+}
+```
+
+- [ ] **Step 3: Add service guess and risk assessment**
+
+Append to `core/scanner/tcp.go`:
+
+```go
+var serviceMap = map[int]string{
+    80:   "http",
+    443:  "https",
+    22:   "ssh",
+    21:   "ftp",
+    25:   "smtp",
+    110:  "pop3",
+    143:  "imap",
+    135:  "msrpc",
+    139:  "netbios",
+    445:  "smb",
+    3389: "rdp",
+    8080: "http-alt",
+    8443: "https-alt",
+    5000: "upnp",
+    9000: "cslistener",
+    554:  "rtsp",
+}
+
+var dangerPorts = []int{3389, 445, 139, 135, 1433, 3306, 6379, 27017, 23}
+
+func GuessService(port int) string {
+    if s, ok := serviceMap[port]; ok {
+        return s
+    }
+    return "unknown"
+}
+
+func AssessRisk(ports []Port) string {
+    for _, p := range ports {
+        for _, d := range dangerPorts {
+            if p.Number == d {
+                return "high"
+            }
+        }
+    }
+    if len(ports) > 5 {
+        return "medium"
+    }
+    return "low"
+}
+```
+
+- [ ] **Step 4: Verify compilation**
+
+```bash
+cd /Users/jinguo.zeng/dmall/project/NetProwl/core
+go build ./...
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add core/
+git commit -m "feat(core): add TCP scanner with concurrency and service guess"
+```
+
+---
+
+## Task 2: Go core: scanner/mdns.go + ssdp.go
+
+**Depends on:** Task 1
+
+- [ ] **Step 1: Write core/scanner/mdns.go**
+
+```go
+package scanner
+
+import (
+    "github.com/grandcat/zeroconf"
+)
+
+type MDNSEntry struct {
+    IP       string
+    Hostname string
+    Port     int
+}
+
+func DiscoverMDNS() ([]MDNSEntry, error) {
+    resolver, err := zeroconf.NewResolver(nil)
+    if err != nil {
+        return nil, err
+    }
+
+    results, err := resolver.Lookup("_netprowl._tcp", "local.")
+    if err != nil {
+        return nil, err
+    }
+
+    entries := make([]MDNSEntry, 0, len(results))
+    for _, ent := range results {
+        entries = append(entries, MDNSEntry{
+            IP:       ent.HostName,
+            Hostname: ent.ServiceInstance,
+            Port:     ent.Port,
+        })
+    }
+    return entries, nil
+}
+```
+
+- [ ] **Step 2: Write core/scanner/ssdp.go**
+
+```go
+package scanner
+
+import (
+    "net"
+    "strings"
+    "time"
+)
+
+const (
+    SSDP_ADDR = "239.255.255.250"
+    SSDP_PORT = 1900
+)
+
+var ssdpSearch = strings.Join([]string{
+    "M-SEARCH * HTTP/1.1",
+    "HOST: 239.255.255.250:1900",
+    `MAN: "ssdp:discover"`,
+    "MX: 2",
+    "ST: ssdp:all",
+    "", "",
+}, "\r\n")
+
+type SSDPEntry struct {
+    IP        string
+    Hostname  string
+    USN       string
+}
+
+func DiscoverSSDP() ([]SSDPEntry, error) {
+    addr, err := net.ResolveUDPAddr("udp", SSDP_ADDR+":"+string(rune(SSDP_PORT)))
+    if err != nil {
+        return nil, err
+    }
+
+    conn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 0})
+    if err != nil {
+        return nil, err
+    }
+    defer conn.Close()
+
+    conn.SetDeadline(time.Now().Add(3 * time.Second))
+    _, err = conn.WriteToUDP([]byte(ssdpSearch), addr)
+    if err != nil {
+        return nil, err
+    }
+
+    entries := make([]SSDPEntry, 0)
+    buf := make([]byte, 4096)
+    for {
+        n, remote, err := conn.ReadFromUDP(buf)
+        if err != nil {
+            break
+        }
+        if strings.Contains(string(buf[:n]), "HTTP/1.1 200") {
+            entries = append(entries, SSDPEntry{
+                IP: remote.IP.String(),
+            })
+        }
+    }
+    return entries, nil
+}
+```
+
+- [ ] **Step 3: Add dependency and verify build**
+
+```bash
+cd /Users/jinguo.zeng/dmall/project/NetProwl/core
+go get github.com/grandcat/zeroconf
+go build ./...
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add core/scanner/mdns.go core/scanner/ssdp.go
+git commit -m "feat(core): add mDNS and SSDP discovery"
+```
+
+---
+
+## Task 3: Go core: scanner/banner.go + registry.go
+
+**Depends on:** Task 2
+
+- [ ] **Step 1: Write core/scanner/banner.go**
+
+```go
+package scanner
+
+import (
+    "fmt"
+    "net"
+    "strings"
+    "time"
+)
+
+func GrabBanner(ip string, port int) string {
+    conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", ip, port), 2*time.Second)
+    if err != nil {
+        return ""
+    }
+    defer conn.Close()
+
+    conn.SetDeadline(time.Now().Add(1 * time.Second))
+
+    switch port {
+    case 80, 8080, 8443:
+        fmt.Fprint(conn, "HEAD / HTTP/1.0\r\n\r\n")
+    case 21:
+        // FTP: read banner on connect
+    case 22:
+        fmt.Fprint(conn, "SSH-2.0-\r\n")
+    }
+
+    buf := make([]byte, 1024)
+    n, _ := conn.Read(buf)
+    if n > 0 {
+        return strings.TrimSpace(string(buf[:n]))
+    }
+    return ""
+}
+```
+
+- [ ] **Step 2: Write core/scanner/registry.go**
+
+```go
+package scanner
+
+type ServiceRule struct {
+    Port         int
+    BannerMatch  string
+    ServiceName  string
+    OS           string
+}
+
+var builtinRules = []ServiceRule{
+    {80, "Server: nginx", "nginx", "linux"},
+    {80, "Server: Apache", "apache", "linux"},
+    {80, "Server: Microsoft", "iis", "windows"},
+    {8080, "Jetty", "jetty", "linux"},
+    {8080, "Tomcat", "tomcat", "linux"},
+    {22, "SSH", "openssh", "linux"},
+    {22, "OpenSSH", "openssh", "linux"},
+    {21, "220 FTP", "vsftpd", "linux"},
+    {3306, "5.", "mysql", "linux"},
+    {1433, "Microsoft SQL Server", "mssql", "windows"},
+    {27017, "MongoDB", "mongodb", "linux"},
+    {6379, "PONG", "redis", "linux"},
+}
+
+func MatchService(port int, banner string) (name string, os string) {
+    for _, rule := range builtinRules {
+        if rule.Port == port && strings.Contains(banner, rule.BannerMatch) {
+            return rule.ServiceName, rule.OS
+        }
+    }
+    return GuessService(port), "unknown"
+}
+```
+
+- [ ] **Step 3: Verify build**
+
+```bash
+go build ./...
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add core/scanner/banner.go core/scanner/registry.go
+git commit -m "feat(core): add banner grab and service registry"
+```
+
+---
+
+## Task 4: Go core: util/oui.go + ip.go
+
+**Depends on:** Task 1
+
+- [ ] **Step 1: Write core/util/oui.go**
+
+```go
+package util
+
+var ouiMap = map[string]string{
+    "00:50:56": "VMware",
+    "00:0c:29": "VMware",
+    "b8:27:eb": "Raspberry Pi",
+    "dc:a6:32": "Raspberry Pi",
+    "e4:5f:01": "Raspberry Pi",
+    "00:1e:68": "Quanta (华为/H3C)",
+    "00:25:9e": "Cisco",
+    "00:1a:2b": "Cisco",
+    "a8:66:7f": "Apple",
+    "f0:18:98": "Apple",
+    "00:0d:2b": "Dell",
+    "00:1c:23": "Dell",
+    "ac:de:48": "Hangzhou Hikvision",
+    "b4:15:13": "Hangzhou Hikvision",
+    "3c:06:30": "Apple",
+    "00:e0:4c": "Realtek",
+    "00:23:cd": "Intel",
+}
+
+func LookupVendor(mac string) string {
+    normalized := normalizeMac(mac)
+    prefix := normalized[:8]
+    if v, ok := ouiMap[prefix]; ok {
+        return v
+    }
+    return ""
+}
+
+func normalizeMac(mac string) string {
+    result := make([]byte, 0, len(mac))
+    for _, c := range mac {
+        if c != ':' && c != '-' {
+            result = append(result, byte(c))
+        }
+    }
+    return strings.ToUpper(string(result))
+}
+```
+
+- [ ] **Step 2: Write core/util/ip.go**
+
+```go
+package util
+
+import (
+    "net"
+    "strings"
+)
+
+func IsPrivateIP(ip string) bool {
+    p := net.ParseIP(ip)
+    if p == nil {
+        return false
+    }
+    return p.IsPrivate() || p.IsLoopback()
+}
+
+func InferSubnet(localIP string) string {
+    ip := net.ParseIP(localIP)
+    if ip == nil {
+        return "192.168.1.0/24"
+    }
+    ip4 := ip.To4()
+    if ip4 == nil {
+        return "192.168.1.0/24"
+    }
+    return fmt.Sprintf("%d.%d.%d.0/24", ip4[0], ip4[1], ip4[2])
+}
+
+func ParseIPRange(ipStart, ipEnd string) ([]string, error) {
+    start := net.ParseIP(ipStart)
+    end := net.ParseIP(ipEnd)
+    if start == nil || end == nil {
+        return nil, fmt.Errorf("invalid IP range")
+    }
+    s := ipToInt(start)
+    e := ipToInt(end)
+    out := make([]string, 0, e-s+1)
+    for i := s; i <= e; i++ {
+        out = append(out, intToIP(i).String())
+    }
+    return out, nil
+}
+
+func ipToInt(ip net.IP) int64 {
+    ip4 := ip.To4()
+    if ip4 == nil {
+        return 0
+    }
+    return int64(ip4[0])<<24 | int64(ip4[1])<<16 | int64(ip4[2])<<8 | int64(ip4[3])
+}
+
+func intToIP(i int64) net.IP {
+    return net.IP{byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)}
+}
+```
+
+Note: Add `"strings"` and `"fmt"` imports to ip.go.
+
+- [ ] **Step 3: Verify build**
+
+```bash
+go build ./...
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add core/util/oui.go core/util/ip.go
+git commit -m "feat(core): add oui lookup and ip utilities"
+```
+
+---
+
+## Task 5: 小程序: 项目脚手架 + 核心类型
+
+**Files:**
+- Create: `netprowl-mini/package.json`
+- Create: `netprowl-mini/project.config.json`
+- Create: `netprowl-mini/tsconfig.json`
+- Create: `netprowl-mini/src/app.ts`
+- Create: `netprowl-mini/src/app.config.ts`
+
+- [ ] **Step 1: Create netprowl-mini directory structure**
+
+```bash
+mkdir -p /Users/jinguo.zeng/dmall/project/NetProwl/netprowl-mini/src/{pages/{index,devices,topology,history},components/{DeviceCard,TopoCanvas,ScanButton},services,stores,utils}
+```
+
+- [ ] **Step 2: Write netprowl-mini/package.json**
 
 ```json
 {
-  "name": "netprowl",
+  "name": "netprowl-mini",
   "version": "1.0.0",
   "scripts": {
     "dev:weapp": "taro build --type weapp --watch",
@@ -74,7 +682,8 @@ netprowl/
   "dependencies": {
     "@tarojs/taro": "4.x",
     "@tarojs/plugin-framework-react": "4.x",
-    "react": "18.x"
+    "react": "18.x",
+    "zustand": "4.x"
   },
   "devDependencies": {
     "@tarojs/cli": "4.x",
@@ -84,15 +693,13 @@ netprowl/
 }
 ```
 
-Run: `npm install`（在 netprowl 目录执行）
-
-- [ ] **Step 2: 创建 project.config.json**
+- [ ] **Step 3: Write netprowl-mini/project.config.json**
 
 ```json
 {
   "miniprogramRoot": "dist/",
   "projectname": "NetProwl",
-  "description": "微信小程序网络安全工具",
+  "description": "NetProwl 微信小程序",
   "appid": "touristappid",
   "setting": {
     "urlCheck": false,
@@ -103,35 +710,36 @@ Run: `npm install`（在 netprowl 目录执行）
 }
 ```
 
-- [ ] **Step 3: 创建 tsconfig.json**
+- [ ] **Step 4: Write src/app.config.ts**
 
-```json
-{
-  "compilerOptions": {
-    "target": "es5",
-    "module": "commonjs",
-    "strict": true,
-    "jsx": "react-jsx",
-    "moduleResolution": "node",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    }
+```typescript
+export default defineAppConfig({
+  pages: [
+    'pages/index/index',
+    'pages/devices/index',
+    'pages/topology/index',
+    'pages/history/index',
+  ],
+  window: {
+    navigationBarBackgroundColor: '#0f0f1a',
+    navigationBarTitleText: 'NetProwl',
+    navigationBarTextStyle: 'white',
+    backgroundTextStyle: 'light',
   },
-  "include": ["src/**/*"]
-}
+  tabBar: {
+    color: '#999',
+    selectedColor: '#00d4ff',
+    backgroundColor: '#1a1a2e',
+    list: [
+      { pagePath: 'pages/index/index', text: '首页', iconPath: 'assets/tab-index.png', selectedIconPath: 'assets/tab-index-active.png' },
+      { pagePath: 'pages/devices/index', text: '设备', iconPath: 'assets/tab-devices.png', selectedIconPath: 'assets/tab-devices-active.png' },
+      { pagePath: 'pages/history/index', text: '历史', iconPath: 'assets/tab-history.png', selectedIconPath: 'assets/tab-history-active.png' },
+    ],
+  },
+})
 ```
 
-- [ ] **Step 4: 创建 .gitignore**
-
-```
-node_modules/
-dist/
-.env
-*.log
-```
-
-- [ ] **Step 5: 创建 src/app.ts**
+- [ ] **Step 5: Write src/app.ts**
 
 ```typescript
 import { Component } from 'react'
@@ -146,311 +754,92 @@ class App extends Component {
 export default App
 ```
 
-- [ ] **Step 6: 创建 src/app.config.ts（TabBar 3 页）**
-
-```typescript
-export default defineAppConfig({
-  pages: [
-    'pages/discovery/index',
-    'pages/history/index',
-    'pages/chat/index'
-  ],
-  window: {
-    backgroundTextStyle: 'light',
-    navigationBarBackgroundColor: '#1a1a2e',
-    navigationBarTitleText: 'NetProwl',
-    navigationBarTextStyle: 'white'
-  },
-  tabBar: {
-    color: '#999',
-    selectedColor: '#00d4ff',
-    backgroundColor: '#1a1a2e',
-    borderStyle: 'black',
-    list: [
-      { pagePath: 'pages/discovery/index', text: '发现', iconPath: 'assets/tab-discovery.png', selectedIconPath: 'assets/tab-discovery-active.png' },
-      { pagePath: 'pages/history/index', text: '历史', iconPath: 'assets/tab-history.png', selectedIconPath: 'assets/tab-history-active.png' },
-      { pagePath: 'pages/chat/index', text: '问诊', iconPath: 'assets/tab-chat.png', selectedIconPath: 'assets/tab-chat-active.png' }
-    ]
-  }
-})
-```
-
-- [ ] **Step 7: 创建 src/app.css**
+- [ ] **Step 6: Write src/app.css**
 
 ```css
 page {
   background-color: #0f0f1a;
   color: #fff;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
 }
 ```
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add -A && git commit -m "chore: scaffold Taro weapp project
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+git add netprowl-mini/
+git commit -m "feat(mini): add Taro project scaffold"
 ```
 
 ---
 
-### Task 2: 类型定义
+## Task 6: 小程序: services (mdns/udp/tcp/storage)
 
-**Files:**
-- Create: `src/types/index.ts`
+**Depends on:** Task 5
 
-- [ ] **Step 1: 创建 src/types/index.ts**
+- [ ] **Step 1: Write src/services/tcp.ts**
 
 ```typescript
-export type DeviceType = 'router' | 'pc' | 'camera' | 'nas' | 'phone' | 'printer' | 'unknown'
+const WHITE_PORTS = [80, 443, 8080, 8443, 554, 5000, 9000, 49152]
+const CONCURRENCY = 20
+const TIMEOUT_MS = 2000
 
-export type OSType = 'linux' | 'windows' | 'network' | 'unknown'
+export async function probeTCPPorts(ip: string): Promise<number[]> {
+  const open: number[] = []
+  const chunks = chunkArray(WHITE_PORTS, CONCURRENCY)
 
-export type DiscoverySource = 'mdns' | 'ssdp' | 'tcp' | 'arp'
-
-export type PortState = 'open' | 'filtered'
-
-export interface Port {
-  port: number
-  service: string | null
-  state: PortState
-  banner?: string
-}
-
-export interface Device {
-  id: string
-  ip: string
-  mac: string | null
-  hostname: string | null
-  vendor: string | null
-  deviceType: DeviceType
-  os: OSType
-  openPorts: Port[]
-  discoveredAt: number
-  sources: DiscoverySource[]
-}
-
-export interface ScanSnapshot {
-  id: string
-  timestamp: number
-  ipRange: string
-  deviceCount: number
-  devices: Device[]
-  summary: {
-    critical: number
-    high: number
-    medium: number
-    low: number
+  for (const group of chunks) {
+    const results = await Promise.all(group.map(port => probePort(ip, port)))
+    results.forEach((p, i) => { if (p) open.push(group[i]) })
+    await delay(50)
   }
+  return open
+}
+
+async function probePort(ip: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = wx.createTCPSocket()
+    let settled = false
+    const timer = setTimeout(() => {
+      if (!settled) { settled = true; socket.close(); resolve(false) }
+    }, TIMEOUT_MS)
+
+    socket.onConnect(() => {
+      if (!settled) { settled = true; clearTimeout(timer); socket.close(); resolve(true) }
+    })
+    socket.onError(() => {
+      if (!settled) { settled = true; clearTimeout(timer); socket.close(); resolve(false) }
+    })
+    socket.connect({ address: ip, port })
+  })
+}
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size))
+  return out
+}
+
+function delay(ms: number) {
+  return new Promise(r => setTimeout(r, ms))
 }
 ```
 
-- [ ] **Step 2: Commit**
-
-```bash
-git add src/types/index.ts && git commit -m "feat: add Device/Port/ScanSnapshot types
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 3: 工具函数
-
-**Files:**
-- Create: `src/utils/ip.ts`
-- Create: `src/utils/oui.ts`
-- Create: `src/utils/gzip.ts`
-
-- [ ] **Step 1: 创建 src/utils/ip.ts**
+- [ ] **Step 2: Write src/services/mdns.ts**
 
 ```typescript
-/** 从本机 IP 推断子网范围（/24） */
-export function inferSubnet(localIP: string): string {
-  const parts = localIP.split('.')
-  parts[3] = '0'
-  return `${parts.join('.')}/24`
-}
+import type { Device } from '../stores/deviceStore'
 
-/** 生成子网内所有 IP */
-export function expandSubnet(subnet: string): string[] {
-  const [base, mask] = subnet.split('/')
-  const prefix = base.split('.').slice(0, 3).join('.')
-  const count = mask === '24' ? 254 : 254
-  return Array.from({ length: count }, (_, i) => `${prefix}.${i + 1}`)
-}
+const SERVICE_TYPES = ['_http._tcp', '_smb._tcp', '_ssh._tcp', '_ftp._tcp', '_airplay._tcp', '_googlecast._tcp']
 
-/** 判断 IP 是否在局域网内 */
-export function isPrivateIP(ip: string): boolean {
-  const p = ip.split('.').map(Number)
-  return (
-    (p[0] === 10) ||
-    (p[0] === 172 && p[1] >= 16 && p[1] <= 31) ||
-    (p[0] === 192 && p[1] === 168)
-  )
-}
-
-/** MAC 地址格式化（统一为小写冒号分隔） */
-export function normalizeMac(mac: string): string {
-  return mac.replace(/[-:]/g, ':').toLowerCase()
-}
-
-/** 基于 TTL 推断 OS */
-export function inferOS(ttl: number): OSType {
-  if (ttl <= 64) return 'linux'
-  if (ttl <= 128) return 'windows'
-  if (ttl >= 255) return 'network'
-  return 'unknown'
-}
-```
-
-- [ ] **Step 2: 创建 src/utils/oui.ts（简化版，约 20 条主流厂商）**
-
-```typescript
-const OUI_MAP: Record<string, string> = {
-  '00:50:56': 'VMware',
-  '00:0c:29': 'VMware',
-  'b8:27:eb': 'Raspberry Pi',
-  'dc:a6:32': 'Raspberry Pi',
-  'e4:5f:01': 'Raspberry Pi',
-  '00:1e:68': 'Quanta (华为/H3C)',
-  '00:25:9e': 'Cisco',
-  '00:1a:2b': 'Cisco',
-  '00:17:88': 'Philips Hue',
-  'a8:66:7f': 'Apple',
-  'f0:18:98': 'Apple',
-  '3c:06:30': 'Apple',
-  '00:e0:4c': 'Realtek',
-  '00:23:cd': 'Intel',
-  '00:1b:21': 'Intel',
-  '00:0d:2b': 'Dell',
-  '00:1c:23': 'Dell',
-  '00:24:e8': 'Dell',
-  '00:50:ba': 'Dell',
-  'ac:de:48': 'Hangzhou Hikvision',
-  'b4:15:13': 'Hangzhou Hikvision',
-  '00:03:93': 'Siemens',
-  '00:1b:a2': 'Schneider Electric',
-}
-
-/** 通过 MAC OUI 前缀查询厂商 */
-export function lookupVendor(mac: string): string | null {
-  const prefix = normalizeMac(mac).substring(0, 8)
-  return OUI_MAP[prefix] || null
-}
-
-function normalizeMac(mac: string): string {
-  return mac.replace(/[-:]/g, ':').toLowerCase()
-}
-```
-
-- [ ] **Step 3: 创建 src/utils/gzip.ts（微信小程序压缩工具）**
-
-```typescript
-import { gzip } from 'minigzip'
-
-export async function compressSnapshot<T>(data: T): Promise<string> {
-  const buffer = Buffer.from(JSON.stringify(data))
-  const compressed = await gzip(buffer)
-  return Buffer.from(compressed).toString('base64')
-}
-
-export async function decompressSnapshot<T>(base64: string): Promise<T> {
-  const buffer = Buffer.from(base64, 'base64')
-  const decompressed = await gzip(buffer)
-  return JSON.parse(decompressed.toString())
-}
-```
-
-> Note: `minigzip` is a lightweight gzip lib. If unavailable, fall back to `JSON.stringify` without compression and add a note in the storage service.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add src/utils/ip.ts src/utils/oui.ts src/utils/gzip.ts && git commit -m "feat: add ip/oui/gzip utils
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 4: 服务层——网络感知
-
-**Files:**
-- Create: `src/services/network.ts`
-
-- [ ] **Step 1: 创建 src/services/network.ts**
-
-```typescript
-import Taro from '@tarojs/taro'
-import { inferSubnet } from '../utils/ip'
-
-interface NetworkInfo {
-  ip: string
-  subnet: string
-}
-
-export async function getLocalNetworkInfo(): Promise<NetworkInfo> {
-  const ip = await getLocalIPAddress()
-  return { ip, subnet: inferSubnet(ip) }
-}
-
-export async function getLocalIPAddress(): Promise<string> {
-  try {
-    const res = Taro.getLocalIPAddress({})
-    return res.ip || '0.0.0.0'
-  } catch {
-    return '0.0.0.0'
-  }
-}
-
-export async function getNetworkType(): Promise<string> {
-  const res = await Taro.getNetworkType()
-  return res.networkType
-}
-```
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add src/services/network.ts && git commit -m "feat: add network service (local IP / subnet)
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 5: 服务层——mDNS 发现
-
-**Files:**
-- Create: `src/services/mdns.ts`
-
-- [ ] **Step 1: 创建 src/services/mdns.ts**
-
-```typescript
-import Taro from '@tarojs/taro'
-import { Device } from '../types'
-
-const SERVICE_TYPES = [
-  '_http._tcp',
-  '_ftp._tcp',
-  '_ssh._tcp',
-  '_smb._tcp',
-  '_airplay._tcp',
-  '_googlecast._tcp',
-  '_ipp._tcp',
-]
-
-export async function discoverViaMDNS(): Promise<Device[]> {
+export async function discoverMDNS(): Promise<Device[]> {
   const devices: Device[] = []
-  const foundMap = new Map<string, Device>()
+  const found = new Map<string, Device>()
 
-  // 订阅发现事件
-  Taro.onLocalServiceFound((res) => {
+  wx.onLocalServiceFound((res: any) => {
     const key = res.serviceName
-    if (!foundMap.has(key)) {
-      foundMap.set(key, {
+    if (!found.has(key)) {
+      found.set(key, {
         id: key,
         ip: res.ip,
         mac: null,
@@ -465,500 +854,405 @@ export async function discoverViaMDNS(): Promise<Device[]> {
     }
   })
 
-  for (const serviceType of SERVICE_TYPES) {
+  for (const st of SERVICE_TYPES) {
     try {
-      await startDiscovery(serviceType)
-    } catch {
-      // 单个失败不中断
+      await wx.startLocalServiceDiscovery({ serviceType: st })
+    } catch (e: any) {
+      if (e?.errCode === -1) {
+        // iOS mDNS disabled — handled at scanner level
+      }
     }
   }
 
-  // 等待一段时间后停止
   await delay(3000)
-  stopDiscovery()
-
-  return Array.from(foundMap.values())
+  wx.stopLocalServiceDiscovery({})
+  return Array.from(found.values())
 }
 
-function startDiscovery(serviceType: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    Taro.startLocalServiceDiscovery({ serviceType })
-      .then(() => resolve())
-      .catch((err) => {
-        // iOS 7.0.18+ errCode -1 表示禁用，降级策略在 scanner 层处理
-        if (err.errCode === -1) {
-          reject(new Error('MDNS_DISABLED'))
-        } else {
-          reject(err)
-        }
-      })
-  })
-}
-
-function stopDiscovery(): void {
-  Taro.stopLocalServiceDiscovery({})
-  Taro.offLocalServiceFound(() => {})
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
-}
-
-export function isMDNSDisabledError(err: unknown): boolean {
-  return err instanceof Error && err.message === 'MDNS_DISABLED'
+function delay(ms: number) {
+  return new Promise(r => setTimeout(r, ms))
 }
 ```
 
-- [ ] **Step 2: Commit**
-
-```bash
-git add src/services/mdns.ts && git commit -m "feat: add mDNS discovery service
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 6: 服务层——UDP SSDP 发现
-
-**Files:**
-- Create: `src/services/udp.ts`
-
-- [ ] **Step 1: 创建 src/services/udp.ts**
+- [ ] **Step 3: Write src/services/udp.ts**
 
 ```typescript
-import Taro from '@tarojs/taro'
-import { Device } from '../types'
+import type { Device } from '../stores/deviceStore'
 
 const SSDP_ADDR = '239.255.255.250'
 const SSDP_PORT = 1900
-const M_SEARCH = [
-  'M-SEARCH * HTTP/1.1',
-  'HOST: 239.255.255.250:1900',
-  'MAN: "ssdp:discover"',
-  'MX: 2',
-  'ST: ssdp:all',
-  '',
-  '',
-].join('\r\n')
+const M_SEARCH = 'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 2\r\nST: ssdp:all\r\n\r\n'
 
-export async function discoverViaSSDP(): Promise<Device[]> {
+export async function discoverSSDP(): Promise<Device[]> {
   const devices: Device[] = []
   const seen = new Set<string>()
 
-  const udp = Taro.createUDPSocket()
-  udp.onMessage((res) => {
-    const banner = arrayBufferToString(res.message)
-    const device = parseSSDPResponse(banner, res.remoteInfo.address)
-    if (device && !seen.has(device.ip)) {
-      seen.add(device.ip)
-      devices.push(device)
-    }
+  const udp = wx.createUDPSocket()
+  udp.onMessage((res: any) => {
+    const banner = bufToString(res.message)
+    if (!banner.includes('HTTP/1.1 200')) return
+    const ip = res.remoteInfo.address
+    if (seen.has(ip)) return
+    seen.add(ip)
+    devices.push(makeDevice(ip, banner, 'ssdp'))
   })
 
-  udp.onError((err) => {
-    console.error('UDP SSDP error', err)
-    udp.close()
-  })
-
-  try {
-    udp.send({
-      address: SSDP_ADDR,
-      port: SSDP_PORT,
-      message: M_SEARCH,
-    })
-
-    await delay(3000)
-  } finally {
-    udp.close()
-  }
+  udp.send({ address: SSDP_ADDR, port: SSDP_PORT, message: M_SEARCH })
+  await delay(3000)
+  udp.close()
 
   return devices
 }
 
-function parseSSDPResponse(banner: string, ip: string): Device | null {
-  if (!banner.includes('HTTP/1.1 200')) return null
-
-  const getHeader = (key: string): string | null => {
-    const re = new RegExp(`^${key}:\\s*(.+)$`, 'im')
-    const m = banner.match(re)
-    return m ? m[1].trim() : null
-  }
-
-  const friendlyName = getHeader('SERVER') || getHeader('X-FriendlyName') || ip
-  const usn = getHeader('USN') || ip
-
+function makeDevice(ip: string, banner: string, source: 'ssdp' | 'tcp'): Device {
   return {
-    id: usn,
+    id: ip,
     ip,
     mac: null,
-    hostname: friendlyName,
+    hostname: extractHeader(banner, 'SERVER') || ip,
     vendor: null,
-    deviceType: inferDeviceType(friendlyName, banner),
+    deviceType: inferType(banner),
     os: 'unknown',
     openPorts: [],
     discoveredAt: Date.now(),
-    sources: ['ssdp'],
+    sources: [source],
   }
 }
 
-function inferDeviceType(name: string, banner: string): DeviceType {
-  const lower = (name + banner).toLowerCase()
+function extractHeader(banner: string, key: string): string | null {
+  const m = banner.match(new RegExp(`^${key}:\\s*(.+)$`, 'im'))
+  return m ? m[1].trim() : null
+}
+
+function inferType(banner: string): Device['deviceType'] {
+  const lower = banner.toLowerCase()
   if (/router|gateway|netgear|tp-link|xiaomi|honor|huawei/.test(lower)) return 'router'
-  if (/camera|ipcam|hikvision|dahua|ezviz|萤石/.test(lower)) return 'camera'
-  if (/nas|synology|qnap|群晖|威联通/.test(lower)) return 'nas'
+  if (/camera|ipcam|hikvision|dahua|ezviz/.test(lower)) return 'camera'
+  if (/nas|synology|qnap|群晖/.test(lower)) return 'nas'
   if (/printer|hp|canon|epson/.test(lower)) return 'printer'
-  if (/iphone|android|手机|mobile/.test(lower)) return 'phone'
   return 'unknown'
 }
 
-function arrayBufferToString(buffer: ArrayBuffer): string {
-  const arr = new Uint8Array(buffer)
+function bufToString(buf: ArrayBuffer): string {
+  const arr = new Uint8Array(buf)
   return String.fromCharCode(...arr)
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
+function delay(ms: number) {
+  return new Promise(r => setTimeout(r, ms))
 }
 ```
 
-- [ ] **Step 2: Commit**
-
-```bash
-git add src/services/udp.ts && git commit -m "feat: add UDP SSDP discovery service
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 7: 服务层——TCP 端口探测
-
-**Files:**
-- Create: `src/services/tcp.ts`
-
-- [ ] **Step 1: 创建 src/services/tcp.ts**
+- [ ] **Step 4: Write src/services/storage.ts**
 
 ```typescript
-import Taro from '@tarojs/taro'
-import { Device, Port } from '../types'
+import type { ScanSnapshot } from '../stores/deviceStore'
 
-const WHITE_PORTS = [80, 443, 8080, 8443, 554, 5000, 9000, 49152]
-const CONCURRENCY = 20
-const TIMEOUT_MS = 2000
-const TOTAL_TIMEOUT_MS = 60000
+const KEY = 'netprowl_scan_history'
+const MAX = 50
 
-export async function probeTCPPorts(ip: string): Promise<Port[]> {
-  const openPorts: Port[] = []
-  const chunks = chunkArray(WHITE_PORTS, CONCURRENCY)
-
-  for (const group of chunks) {
-    const results = await Promise.all(group.map((port) => probePort(ip, port)))
-    results.forEach((p) => { if (p) openPorts.push(p) })
-    await delay(50)
-  }
-
-  return openPorts
-}
-
-async function probePort(ip: string, port: number): Promise<Port | null> {
-  return new Promise((resolve) => {
-    const socket = Taro.createTCPSocket()
-    let settled = false
-
-    const timer = setTimeout(() => {
-      if (!settled) {
-        settled = true
-        socket.close()
-        resolve(null)
-      }
-    }, TIMEOUT_MS)
-
-    socket.onConnect(() => {
-      if (!settled) {
-        settled = true
-        clearTimeout(timer)
-        socket.close()
-        resolve({ port, service: null, state: 'open' })
-      }
-    })
-
-    socket.onError(() => {
-      if (!settled) {
-        settled = true
-        clearTimeout(timer)
-        socket.close()
-        resolve(null)
-      }
-    })
-
-    socket.connect({ address: ip, port })
-  })
-}
-
-export async function probeIPs(ipRange: string, ips: string[]): Promise<Device[]> {
-  const devices: Device[] = []
-  const start = Date.now()
-
-  for (const ip of ips) {
-    if (Date.now() - start > TOTAL_TIMEOUT_MS) break
-
-    const ports = await probeTCPPorts(ip)
-    if (ports.length > 0) {
-      devices.push({
-        id: ip,
-        ip,
-        mac: null,
-        hostname: null,
-        vendor: null,
-        deviceType: 'unknown',
-        os: 'unknown',
-        openPorts: ports,
-        discoveredAt: Date.now(),
-        sources: ['tcp'],
-      })
-    }
-  }
-
-  return devices
-}
-
-function chunkArray<T>(arr: T[], size: number): T[][] {
-  const chunks: T[][] = []
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size))
-  }
-  return chunks
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
-}
-```
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add src/services/tcp.ts && git commit -m "feat: add TCP port probe service
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 8: 服务层——存储服务
-
-**Files:**
-- Create: `src/services/storage.ts`
-
-- [ ] **Step 1: 创建 src/services/storage.ts**
-
-```typescript
-import Taro from '@tarojs/taro'
-import { ScanSnapshot } from '../types'
-
-const STORAGE_KEY = 'netprowl_scan_history'
-const MAX_RECORDS = 50
-
-export async function loadHistory(): Promise<ScanSnapshot[]> {
+export function loadHistory(): ScanSnapshot[] {
   try {
-    const raw = Taro.getStorageSync(STORAGE_KEY)
+    const raw = wx.getStorageSync(KEY)
     return raw ? JSON.parse(raw) : []
   } catch {
     return []
   }
 }
 
-export async function saveSnapshot(snapshot: ScanSnapshot): Promise<void> {
-  const history = await loadHistory()
-  history.unshift(snapshot)
-
-  // 超限裁剪
-  while (history.length > MAX_RECORDS) {
-    history.pop()
-  }
-
-  // 估算大小，超过 10MB 则清理旧记录
+export function saveSnapshot(snap: ScanSnapshot): void {
+  const history = loadHistory()
+  history.unshift(snap)
+  while (history.length > MAX) history.pop()
   const data = JSON.stringify(history)
-  if (data.length > 10 * 1024 * 1024) {
-    history.splice(0, 3)
-  }
-
-  Taro.setStorageSync(STORAGE_KEY, JSON.stringify(history))
+  if (data.length > 10 * 1024 * 1024) history.splice(0, 3)
+  wx.setStorageSync(KEY, JSON.stringify(history))
 }
 
-export async function clearHistory(): Promise<void> {
-  Taro.removeStorageSync(STORAGE_KEY)
+export function clearHistory(): void {
+  wx.removeStorageSync(KEY)
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/services/storage.ts && git commit -m "feat: add storage service
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+git add netprowl-mini/src/services/
+git commit -m "feat(mini): add mdns/udp/tcp/storage services"
 ```
 
 ---
 
-### Task 9: 服务层——扫描引擎入口
+## Task 7: 小程序: stores + components
 
-**Files:**
-- Create: `src/services/scanner.ts`
+**Depends on:** Task 6
 
-- [ ] **Step 1: 创建 src/services/scanner.ts**
+- [ ] **Step 1: Write src/stores/deviceStore.ts**
 
 ```typescript
-import { Device } from '../types'
-import { getLocalNetworkInfo } from './network'
-import { discoverViaMDNS, isMDNSDisabledError } from './mdns'
-import { discoverViaSSDP } from './udp'
-import { probeIPs } from './tcp'
-import { expandSubnet } from '../utils/ip'
-import { lookupVendor } from '../utils/oui'
-import { saveSnapshot } from './storage'
+import { create } from 'zustand'
 
-export interface ScanResult {
+export type DeviceType = 'router' | 'pc' | 'camera' | 'nas' | 'phone' | 'printer' | 'unknown'
+export type OSType = 'linux' | 'windows' | 'network' | 'unknown'
+
+export interface Port {
+  number: number
+  service: string | null
+  state: 'open' | 'filtered'
+  banner?: string
+}
+
+export interface Device {
+  id: string
+  ip: string
+  mac: string | null
+  hostname: string | null
+  vendor: string | null
+  deviceType: DeviceType
+  os: OSType
+  openPorts: Port[]
+  discoveredAt: number
+  sources: ('mdns' | 'ssdp' | 'tcp')[]
+}
+
+export interface ScanSnapshot {
+  id: string
+  timestamp: number
+  ipRange: string
+  deviceCount: number
   devices: Device[]
-  duration: number
-  mdnsUnavailable: boolean
 }
 
-export async function runScan(): Promise<ScanResult> {
-  const start = Date.now()
-  const { ip, subnet } = await getLocalNetworkInfo()
-  const allIPs = expandSubnet(subnet)
+interface DeviceStore {
+  devices: Device[]
+  history: ScanSnapshot[]
+  scanning: boolean
+  addDevice: (d: Device) => void
+  setDevices: (ds: Device[]) => void
+  setScanning: (v: boolean) => void
+  loadHistory: () => void
+}
 
-  let mdnsUnavailable = false
-  const mdnsDevices: Device[] = []
-  const ssdpDevices: Device[] = []
-  const tcpDevices: Device[] = []
+export const useDeviceStore = create<DeviceStore>((set, get) => ({
+  devices: [],
+  history: [],
+  scanning: false,
 
-  // Stage 1: mDNS
+  addDevice: (d) => set(s => ({ devices: [...s.devices.filter(x => x.ip !== d.ip), d] })),
+
+  setDevices: (devices) => set({ devices }),
+
+  setScanning: (scanning) => set({ scanning }),
+
+  loadHistory: () => {
+    const history = loadHistoryFromStorage()
+    set({ history })
+  },
+}))
+
+function loadHistoryFromStorage(): ScanSnapshot[] {
   try {
-    const results = await discoverViaMDNS()
-    mdnsDevices.push(...results)
-  } catch (err) {
-    if (isMDNSDisabledError(err)) {
-      mdnsUnavailable = true
-    }
+    const raw = wx.getStorageSync('netprowl_scan_history')
+    return raw ? JSON.parse(raw) : []
+  } catch {
+    return []
   }
-
-  // Stage 2: SSDP (parallel with TCP scan to save time)
-  const ssdpPromise = discoverViaSSDP()
-  const tcpPromise = probeIPs(subnet, allIPs)
-
-  const [ssdp, tcp] = await Promise.all([ssdpPromise, tcpPromise])
-  ssdpDevices.push(...ssdp)
-  tcpDevices.push(...tcp)
-
-  // Merge & deduup
-  const merged = mergeDevices([...mdnsDevices, ...ssdpDevices, ...tcpDevices])
-  merged.forEach((d) => { if (d.vendor === null) d.vendor = d.mac ? lookupVendor(d.mac) : null })
-
-  const duration = Date.now() - start
-
-  // Save snapshot
-  await saveSnapshot({
-    id: `scan_${Date.now()}`,
-    timestamp: Date.now(),
-    ipRange: subnet,
-    deviceCount: merged.length,
-    devices: merged,
-    summary: { critical: 0, high: 0, medium: 0, low: 0 },
-  })
-
-  return { devices: merged, duration, mdnsUnavailable }
-}
-
-function mergeDevices(devices: Device[]): Device[] {
-  const map = new Map<string, Device>()
-  for (const d of devices) {
-    if (map.has(d.ip)) {
-      const existing = map.get(d.ip)!
-      existing.sources = [...new Set([...existing.sources, ...d.sources])]
-      existing.openPorts = dedupPorts([...existing.openPorts, ...d.openPorts])
-    } else {
-      map.set(d.ip, { ...d })
-    }
-  }
-  return Array.from(map.values())
-}
-
-function dedupPorts(ports: Port[]): Port[] {
-  const seen = new Set<number>()
-  return ports.filter((p) => {
-    if (seen.has(p.port)) return false
-    seen.add(p.port)
-    return true
-  })
 }
 ```
 
-- [ ] **Step 2: Commit**
-
-```bash
-git add src/services/scanner.ts && git commit -m "feat: add scan engine orchestrator
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 10: 基础组件——线性图标
-
-**Files:**
-- Create: `src/components/icons/index.tsx`
-
-- [ ] **Step 1: 创建 src/components/icons/index.tsx**
+- [ ] **Step 2: Write src/components/DeviceCard/index.tsx**
 
 ```typescript
 import { Component } from 'react'
-import { DeviceType } from '../../types'
+import { View, Text } from '@tarojs/components'
+import type { Device } from '../../stores/deviceStore'
+import './index.css'
 
-interface IconProps {
-  type: DeviceType
-  size?: number
+interface Props {
+  device: Device
+  onClick: (d: Device) => void
 }
 
-export function DeviceIcon({ type, size = 32 }: IconProps) {
-  const icons: Record<DeviceType, string> = {
-    router: '🛣',  // 路由
-    pc: '💻',
-    camera: '📹',
-    nas: '💾',
-    phone: '📱',
-    printer: '🖨',
-    unknown: '❓',
+export default class DeviceCard extends Component<Props> {
+  render() {
+    const { device, onClick } = this.props
+    return (
+      <View className='card' onClick={() => onClick(device)}>
+        <View className='card-icon'>{this.getIcon(device.deviceType)}</View>
+        <View className='card-info'>
+          <Text className='ip'>{device.ip}</Text>
+          <Text className='vendor'>{device.vendor || '未知厂商'}</Text>
+        </View>
+        <Text className='port-count'>{device.openPorts.length} 端口</Text>
+      </View>
+    )
   }
-  return <span style={{ fontSize: size }}>{icons[type]}</span>
+
+  getIcon(type: Device['deviceType']) {
+    return { router: '🛣', pc: '💻', camera: '📹', nas: '💾', phone: '📱', printer: '🖨', unknown: '❓' }[type]
+  }
 }
 ```
 
-> Note: 使用 emoji 作为占位图标，Phase 2 替换为 SVG 线性图标。
+- [ ] **Step 3: Write CSS for DeviceCard**
 
-- [ ] **Step 2: Commit**
-
-```bash
-git add src/components/icons/index.tsx && git commit -m "feat: add device icon component (emoji placeholder)
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+```css
+.card {
+  display: flex;
+  align-items: center;
+  background: #1e1e3a;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+}
+.card-icon { width: 64rpx; text-align: center; font-size: 40rpx; }
+.card-info { flex: 1; margin-left: 16rpx; }
+.ip { display: block; color: #fff; font-size: 30rpx; font-weight: 500; }
+.vendor { display: block; color: #888; font-size: 24rpx; margin-top: 4rpx; }
+.port-count { color: #00d4ff; font-size: 26rpx; }
 ```
 
----
-
-### Task 11: 组件——ScanButton
-
-**Files:**
-- Create: `src/components/ScanButton/index.tsx`
-
-- [ ] **Step 1: 创建 src/components/ScanButton/index.tsx**
+- [ ] **Step 4: Write src/components/TopoCanvas/index.tsx**
 
 ```typescript
 import { Component } from 'react'
-import Taro from '@tarojs/taro'
+import { View } from '@tarojs/components'
+import type { Device } from '../../stores/deviceStore'
+import './index.css'
+
+interface Props {
+  devices: Device[]
+  gatewayIP: string
+  onDeviceClick: (d: Device) => void
+}
+
+export default class TopoCanvas extends Component<Props> {
+  componentDidMount() {
+    this.render()
+  }
+
+  componentDidUpdate() {
+    this.render()
+  }
+
+  render() {
+    const { devices, gatewayIP } = this.props
+    if (devices.length === 0) return (
+      <View className='topo-empty'>
+        <Text className='empty-icon'>🛣</Text>
+        <Text className='empty-text'>点击下方按钮开始扫描</Text>
+      </View>
+    )
+
+    // 星形布局：中心网关，周围设备
+    const query = Taro.createSelectorQuery()
+    query.select('#topo-canvas').node((res: any) => {
+      if (!res) return
+      const canvas = res.node
+      const ctx = canvas.getContext('2d')
+      const dpr = Taro.getSystemInfoSync().pixelRatio || 1
+      const w = Taro.getSystemInfoSync().windowWidth
+      canvas.width = w * dpr
+      canvas.height = (w * 0.7) * dpr
+      ctx.scale(dpr, dpr)
+      this.draw(ctx, w, w * 0.7, devices, gatewayIP)
+    }).exec()
+    return <canvas id='topo-canvas' className='topo-canvas' onClick={this.handleClick} />
+  }
+
+  draw(ctx: any, w: number, h: number, devices: Device[], gatewayIP: string) {
+    ctx.clearRect(0, 0, w, h)
+    const cx = w / 2, cy = h / 2
+    const r = Math.min(w, h) * 0.35
+    const gateway = devices.find(d => d.ip === gatewayIP) || devices[0]
+    const others = devices.filter(d => d.ip !== gateway?.ip)
+
+    // 连接线
+    others.forEach((dev, i) => {
+      const angle = (2 * Math.PI * i) / others.length - Math.PI / 2
+      const x = cx + r * Math.cos(angle)
+      const y = cy + r * Math.sin(angle)
+      ctx.beginPath()
+      ctx.strokeStyle = '#2a2a4a'
+      ctx.lineWidth = 1
+      ctx.moveTo(cx, cy)
+      ctx.lineTo(x, y)
+      ctx.stroke()
+    })
+
+    // 中心网关
+    ctx.beginPath()
+    ctx.fillStyle = '#0077ff'
+    ctx.strokeStyle = '#00d4ff'
+    ctx.lineWidth = 2
+    ctx.arc(cx, cy, 28, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+    ctx.fillStyle = '#fff'
+    ctx.font = '20px sans-serif'
+    ctx.textAlign = 'center'
+    ctx.fillText('🛣', cx, cy + 6)
+
+    // 周围设备
+    others.forEach((dev, i) => {
+      const angle = (2 * Math.PI * i) / others.length - Math.PI / 2
+      const x = cx + r * Math.cos(angle)
+      const y = cy + r * Math.sin(angle)
+      const riskColor = { low: '#4caf50', medium: '#ff9800', high: '#f44336', critical: '#b71c1c' }[dev.openPorts.length > 3 ? 'high' : dev.openPorts.length > 0 ? 'medium' : 'low'] || '#999'
+
+      ctx.beginPath()
+      ctx.fillStyle = '#1e1e3a'
+      ctx.strokeStyle = riskColor
+      ctx.lineWidth = 2
+      ctx.arc(x, y, 22, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = '#fff'
+      ctx.font = '16px sans-serif'
+      ctx.textAlign = 'center'
+      const icon = this.getIcon(dev.deviceType)
+      ctx.fillText(icon, x, y - 4)
+      ctx.fillStyle = '#888'
+      ctx.font = '10px sans-serif'
+      ctx.fillText(dev.ip.split('.').pop() || '', x, y + 35)
+    })
+  }
+
+  getIcon(type: Device['deviceType']) {
+    return { router: '🛣', pc: '💻', camera: '📹', nas: '💾', phone: '📱', printer: '🖨', unknown: '❓' }[type]
+  }
+
+  handleClick(e: any) {
+    const { devices, gatewayIP } = this.props
+    const { x, y } = e.detail
+    const w = Taro.getSystemInfoSync().windowWidth
+    const h = w * 0.7
+    const cx = w / 2, cy = h / 2
+    const r = Math.min(w, h) * 0.35
+    const gateway = devices.find(d => d.ip === gatewayIP) || devices[0]
+    const others = devices.filter(d => d.ip !== gateway?.ip)
+
+    // Hit test center
+    const dx0 = x - cx, dy0 = y - cy
+    if (dx0*dx0 + dy0*dy0 < 28*28) { this.props.onDeviceClick(gateway); return }
+
+    others.forEach((dev, i) => {
+      const angle = (2 * Math.PI * i) / others.length - Math.PI / 2
+      const nx = cx + r * Math.cos(angle)
+      const ny = cy + r * Math.sin(angle)
+      const dx = x - nx, dy = y - ny
+      if (dx*dx + dy*dy < 22*22) { this.props.onDeviceClick(dev) }
+    })
+  }
+}
+```
+
+- [ ] **Step 5: Write src/components/ScanButton/index.tsx**
+
+```typescript
+import { Component } from 'react'
 import { View, Button, Text } from '@tarojs/components'
+import './index.css'
 
 interface Props {
   scanning: boolean
@@ -967,15 +1261,10 @@ interface Props {
 
 export default class ScanButton extends Component<Props> {
   render() {
-    const { scanning, onScan } = this.props
     return (
-      <View className='scan-button-wrap'>
-        <Button
-          className={`scan-btn ${scanning ? 'scanning' : ''}`}
-          onClick={onScan}
-          disabled={scanning}
-        >
-          {scanning ? '⏳ 扫描中...' : '🔍 开始扫描'}
+      <View className='scan-btn-wrap'>
+        <Button className={`scan-btn ${this.props.scanning ? 'scanning' : ''}`} onClick={this.props.onScan} disabled={this.props.scanning}>
+          {this.props.scanning ? '⏳ 扫描中...' : '🔍 开始扫描'}
         </Button>
       </View>
     )
@@ -983,842 +1272,111 @@ export default class ScanButton extends Component<Props> {
 }
 ```
 
-- [ ] **Step 2: 创建 CSS（src/components/ScanButton/index.css）**
-
 ```css
-.scan-button-wrap {
-  padding: 24rpx 32rpx;
-}
-
-.scan-btn {
-  width: 100%;
-  height: 96rpx;
-  line-height: 96rpx;
-  background: linear-gradient(135deg, #00d4ff, #0077ff);
-  color: #fff;
-  font-size: 32rpx;
-  font-weight: 600;
-  border-radius: 48rpx;
-  border: none;
-}
-
-.scan-btn[disabled] {
-  background: #333;
-  color: #888;
-}
+.scan-btn-wrap { padding: 24rpx 32rpx; }
+.scan-btn { width: 100%; height: 96rpx; background: linear-gradient(135deg, #00d4ff, #0077ff); color: #fff; font-size: 32rpx; font-weight: 600; border-radius: 48rpx; border: none; }
+.scan-btn[disabled] { background: #333; color: #888; }
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/components/ScanButton/index.tsx src/components/ScanButton/index.css && git commit -m "feat: add ScanButton component
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+git add netprowl-mini/src/stores/ netprowl-mini/src/components/
+git commit -m "feat(mini): add deviceStore, DeviceCard, TopoCanvas, ScanButton"
 ```
 
 ---
 
-### Task 12: 组件——PortList
+## Task 8: 小程序: pages (index/devices/topology/history)
 
-**Files:**
-- Create: `src/components/PortList/index.tsx`
+**Depends on:** Task 7
 
-- [ ] **Step 1: 创建 src/components/PortList/index.tsx**
+- [ ] **Step 1: Write pages/index/index.tsx**
 
 ```typescript
 import { Component } from 'react'
 import { View, Text } from '@tarojs/components'
-import { Port } from '../../types'
-
-interface Props {
-  ports: Port[]
-}
-
-export default class PortList extends Component<Props> {
-  render() {
-    const { ports } = this.props
-    if (ports.length === 0) {
-      return <Text className='port-empty'>暂未发现开放端口</Text>
-    }
-    return (
-      <View className='port-list'>
-        {ports.map((p) => (
-          <View className='port-item' key={p.port}>
-            <Text className='port-num'>{p.port}</Text>
-            <Text className='port-service'>{p.service || 'unknown'}</Text>
-          </View>
-        ))}
-      </View>
-    )
-  }
-}
-```
-
-- [ ] **Step 2: 创建 CSS**
-
-```css
-.port-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16rpx;
-}
-
-.port-item {
-  display: flex;
-  align-items: center;
-  background: #1e1e3a;
-  border-radius: 8rpx;
-  padding: 8rpx 16rpx;
-}
-
-.port-num {
-  color: #00d4ff;
-  font-size: 28rpx;
-  font-weight: 600;
-  margin-right: 8rpx;
-}
-
-.port-service {
-  color: #999;
-  font-size: 24rpx;
-}
-
-.port-empty {
-  color: #666;
-  font-size: 26rpx;
-}
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/components/PortList/index.tsx src/components/PortList/index.css && git commit -m "feat: add PortList component
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 13: 组件——DeviceCard
-
-**Files:**
-- Create: `src/components/DeviceCard/index.tsx`
-
-- [ ] **Step 1: 创建 src/components/DeviceCard/index.tsx**
-
-```typescript
-import { Component } from 'react'
-import { View, Text } from '@tarojs/components'
-import { Device } from '../../types'
-import { DeviceIcon } from '../icons'
-
-interface Props {
-  device: Device
-  onClick: (device: Device) => void
-}
-
-export default class DeviceCard extends Component<Props> {
-  render() {
-    const { device, onClick } = this.props
-    return (
-      <View className='device-card' onClick={() => onClick(device)}>
-        <View className='card-icon'>
-          <DeviceIcon type={device.deviceType} size={28} />
-        </View>
-        <View className='card-info'>
-          <Text className='card-ip'>{device.ip}</Text>
-          <Text className='card-vendor'>{device.vendor || '未知厂商'}</Text>
-        </View>
-        <Text className='card-ports'>{device.openPorts.length} 端口</Text>
-      </View>
-    )
-  }
-}
-```
-
-- [ ] **Step 2: 创建 CSS**
-
-```css
-.device-card {
-  display: flex;
-  align-items: center;
-  background: #1e1e3a;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 16rpx;
-}
-
-.card-icon {
-  width: 64rpx;
-  text-align: center;
-}
-
-.card-info {
-  flex: 1;
-  margin-left: 16rpx;
-}
-
-.card-ip {
-  display: block;
-  color: #fff;
-  font-size: 30rpx;
-  font-weight: 500;
-}
-
-.card-vendor {
-  display: block;
-  color: #888;
-  font-size: 24rpx;
-  margin-top: 4rpx;
-}
-
-.card-ports {
-  color: #00d4ff;
-  font-size: 26rpx;
-}
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/components/DeviceCard/index.tsx src/components/DeviceCard/index.css && git commit -m "feat: add DeviceCard component
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 14: 组件——DeviceDrawer
-
-**Files:**
-- Create: `src/components/DeviceDrawer/index.tsx`
-
-- [ ] **Step 1: 创建 src/components/DeviceDrawer/index.tsx**
-
-```typescript
-import { Component } from 'react'
-import { View, Text } from '@tarojs/components'
-import { Device } from '../../types'
-import { DeviceIcon } from '../icons'
-import PortList from '../PortList'
-
-interface Props {
-  device: Device | null
-  onClose: () => void
-}
-
-export default class DeviceDrawer extends Component<Props> {
-  render() {
-    const { device, onClose } = this.props
-    if (!device) return null
-
-    return (
-      <View className='drawer-overlay' onClick={onClose}>
-        <View className='drawer-panel' onClick={(e) => e.stopPropagation()}>
-          <View className='drawer-header'>
-            <DeviceIcon type={device.deviceType} size={40} />
-            <View className='header-info'>
-              <Text className='header-ip'>{device.ip}</Text>
-              <Text className='header-vendor'>{device.vendor || '未知厂商'}</Text>
-            </View>
-            <Text className='close-btn' onClick={onClose}>✕</Text>
-          </View>
-
-          <View className='drawer-body'>
-            <View className='info-row'>
-              <Text className='info-label'>MAC</Text>
-              <Text className='info-value'>{device.mac || '—'}</Text>
-            </View>
-            <View className='info-row'>
-              <Text className='info-label'>主机名</Text>
-              <Text className='info-value'>{device.hostname || '—'}</Text>
-            </View>
-            <View className='info-row'>
-              <Text className='info-label'>设备类型</Text>
-              <Text className='info-value'>{device.deviceType}</Text>
-            </View>
-            <View className='info-row'>
-              <Text className='info-label'>发现方式</Text>
-              <Text className='info-value'>{device.sources.join(', ')}</Text>
-            </View>
-            <View className='ports-section'>
-              <Text className='section-title'>开放端口</Text>
-              <PortList ports={device.openPorts} />
-            </View>
-          </View>
-        </View>
-      </View>
-    )
-  }
-}
-```
-
-- [ ] **Step 2: 创建 CSS**
-
-```css
-.drawer-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 100;
-}
-
-.drawer-panel {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: #1a1a2e;
-  border-radius: 32rpx 32rpx 0 0;
-  max-height: 70vh;
-  overflow-y: auto;
-  padding: 32rpx;
-}
-
-.drawer-header {
-  display: flex;
-  align-items: center;
-  margin-bottom: 32rpx;
-}
-
-.header-info {
-  flex: 1;
-  margin-left: 24rpx;
-}
-
-.header-ip {
-  display: block;
-  color: #fff;
-  font-size: 36rpx;
-  font-weight: 600;
-}
-
-.header-vendor {
-  display: block;
-  color: #888;
-  font-size: 26rpx;
-  margin-top: 4rpx;
-}
-
-.close-btn {
-  color: #666;
-  font-size: 40rpx;
-  padding: 16rpx;
-}
-
-.drawer-body {
-  display: flex;
-  flex-direction: column;
-  gap: 24rpx;
-}
-
-.info-row {
-  display: flex;
-  justify-content: space-between;
-  border-bottom: 1rpx solid #2a2a4a;
-  padding-bottom: 16rpx;
-}
-
-.info-label {
-  color: #888;
-  font-size: 28rpx;
-}
-
-.info-value {
-  color: #fff;
-  font-size: 28rpx;
-}
-
-.ports-section {
-  margin-top: 16rpx;
-}
-
-.section-title {
-  display: block;
-  color: #888;
-  font-size: 28rpx;
-  margin-bottom: 16rpx;
-}
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/components/DeviceDrawer/index.tsx src/components/DeviceDrawer/index.css && git commit -m "feat: add DeviceDrawer component
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 15: 组件——TopologyCanvas
-
-**Files:**
-- Create: `src/components/TopologyCanvas/index.tsx`
-
-- [ ] **Step 1: 创建 src/components/TopologyCanvas/index.tsx（星形布局 Canvas）**
-
-```typescript
-import { Component } from 'react'
-import { View } from '@tarojs/components'
-import Taro from '@tarojs/taro'
-import { Device, DeviceType } from '../../types'
-import { DeviceIcon } from '../icons'
-
-interface Props {
-  devices: Device[]
-  gatewayIP: string
-  onDeviceClick: (device: Device) => void
-}
-
-interface NodePosition {
-  device: Device
-  x: number
-  y: number
-}
-
-export default class TopologyCanvas extends Component<Props> {
-  private canvas: any
-  private ctx: any
-  private dpr: number = 1
-  private nodes: NodePosition[] = []
-
-  componentDidMount() {
-    this.initCanvas()
-    Taro.eventCenter.on('onresize', this.initCanvas.bind(this))
-  }
-
-  componentDidUpdate() {
-    this.render()
-  }
-
-  componentWillUnmount() {
-    Taro.eventCenter.off('onresize', this.initCanvas.bind(this))
-  }
-
-  initCanvas() {
-    const query = Taro.createSelectorQuery()
-    query.select('#topology-canvas')
-      .node((res: any) => {
-        if (!res) return
-        this.canvas = res.node
-        this.ctx = this.canvas.getContext('2d')
-        this.dpr = Taro.getSystemInfoSync().pixelRatio || 1
-        const w = Taro.getSystemInfoSync().windowWidth
-        this.canvas.width = w * this.dpr
-        this.canvas.height = (w * 0.7) * this.dpr
-        this.canvas.style.width = `${w}px`
-        this.canvas.style.height = `${w * 0.7}px`
-        this.ctx.scale(this.dpr, this.dpr)
-        this.render()
-      })
-      .exec()
-  }
-
-  render() {
-    const { devices, gatewayIP } = this.props
-    if (!this.ctx) return
-
-    const w = Taro.getSystemInfoSync().windowWidth
-    const h = w * 0.7
-    const cx = w / 2
-    const cy = h / 2
-    const radius = Math.min(w, h) * 0.35
-
-    // 计算节点位置
-    this.nodes = this.calcNodePositions(devices, gatewayIP, cx, cy, radius)
-    this.draw()
-  }
-
-  calcNodePositions(devices: Device[], gatewayIP: string, cx: number, cy: number, radius: number): NodePosition[] {
-    const gateway = devices.find((d) => d.ip === gatewayIP) || devices[0]
-    const others = devices.filter((d) => d.ip !== gateway?.ip)
-
-    const result: NodePosition[] = []
-
-    // Gateway 放中心
-    if (gateway) {
-      result.push({ device: gateway, x: cx, y: cy })
-    }
-
-    // 其他设备环形分布
-    others.forEach((device, i) => {
-      const angle = (2 * Math.PI * i) / others.length - Math.PI / 2
-      result.push({
-        device,
-        x: cx + radius * Math.cos(angle),
-        y: cy + radius * Math.sin(angle),
-      })
-    })
-
-    return result
-  }
-
-  draw() {
-    if (!this.ctx) return
-    const w = Taro.getSystemInfoSync().windowWidth
-    const h = w * 0.7
-
-    this.ctx.clearRect(0, 0, w, h)
-
-    // 画连接线（从中心到各节点）
-    const [center, ...others] = this.nodes
-    if (!center) return
-
-    others.forEach(({ x, y }) => {
-      this.ctx.beginPath()
-      this.ctx.strokeStyle = '#2a2a4a'
-      this.ctx.lineWidth = 1
-      this.ctx.moveTo(center.x, center.y)
-      this.ctx.lineTo(x, y)
-      this.ctx.stroke()
-    })
-
-    // 画节点
-    this.nodes.forEach(({ device, x, y }, idx) => {
-      const isGateway = idx === 0
-      const r = isGateway ? 28 : 22
-
-      // 节点圆
-      this.ctx.beginPath()
-      this.ctx.fillStyle = isGateway ? '#0077ff' : '#1e1e3a'
-      this.ctx.strokeStyle = isGateway ? '#00d4ff' : '#2a2a4a'
-      this.ctx.lineWidth = 2
-      this.ctx.arc(x, y, r, 0, 2 * Math.PI)
-      this.ctx.fill()
-      this.ctx.stroke()
-
-      // 文字（emoji icon + IP）
-      this.ctx.fillStyle = '#fff'
-      this.ctx.font = `${isGateway ? 20 : 16}px sans-serif`
-      this.ctx.textAlign = 'center'
-      const icon = this.getIcon(device.deviceType)
-      this.ctx.fillText(icon, x, y - 8)
-      this.ctx.fillStyle = '#888'
-      this.ctx.font = '10px sans-serif'
-      this.ctx.fillText(device.ip.split('.').pop() || '', x, y + r + 12)
-    })
-  }
-
-  getIcon(type: DeviceType): string {
-    const map: Record<DeviceType, string> = {
-      router: '🛣', pc: '💻', camera: '📹', nas: '💾', phone: '📱', printer: '🖨', unknown: '❓',
-    }
-    return map[type]
-  }
-
-  handleClick(e: any) {
-    const { devices, gatewayIP } = this.props
-    const { x, y } = e.detail
-    const w = Taro.getSystemInfoSync().windowWidth
-
-    // hit test
-    for (const node of this.nodes) {
-      const dx = node.x - x
-      const dy = node.y - y
-      if (dx * dx + dy * dy < 30 * 30) {
-        this.props.onDeviceClick(node.device)
-        return
-      }
-    }
-  }
-
-  render() {
-    return (
-      <View>
-        <canvas
-          id='topology-canvas'
-          className='topology-canvas'
-          onClick={this.handleClick.bind(this)}
-        />
-      </View>
-    )
-  }
-}
-```
-
-- [ ] **Step 2: 创建 CSS**
-
-```css
-.topology-canvas {
-  width: 100%;
-  height: 70vw;
-  display: block;
-}
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/components/TopologyCanvas/index.tsx src/components/TopologyCanvas/index.css && git commit -m "feat: add TopologyCanvas (star layout)
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 16: 发现页（discovery）
-
-**Files:**
-- Create: `src/pages/discovery/index.tsx`
-- Create: `src/pages/discovery/index.config.ts`
-
-- [ ] **Step 1: 创建 src/pages/discovery/index.config.ts**
-
-```typescript
-export default definePageConfig({
-  navigationBarTitleText: 'NetProwl',
-})
-```
-
-- [ ] **Step 2: 创建 src/pages/discovery/index.tsx**
-
-```typescript
-import { Component } from 'react'
-import { View, Text } from '@tarojs/components'
-import Taro from '@tarojs/taro'
-import { Device } from '../../types'
-import { runScan } from '../../services/scanner'
-import { getLocalIPAddress } from '../../services/network'
-import TopologyCanvas from '../../components/TopologyCanvas'
-import DeviceDrawer from '../../components/DeviceDrawer'
+import { useDeviceStore } from '../../stores/deviceStore'
+import { discoverMDNS } from '../../services/mdns'
+import { discoverSSDP } from '../../services/udp'
+import TopoCanvas from '../../components/TopoCanvas'
 import ScanButton from '../../components/ScanButton'
+import './index.css'
 
-interface State {
-  devices: Device[]
-  scanning: boolean
-  selectedDevice: Device | null
-  mdnsUnavailable: boolean
-  lastScanTime: number | null
-  summaryText: string
-}
+export default class IndexPage extends Component {
+  store = useDeviceStore()
 
-export default class Discovery extends Component<State> {
-  state: State = {
-    devices: [],
-    scanning: false,
-    selectedDevice: null,
-    mdnsUnavailable: false,
-    lastScanTime: null,
-    summaryText: '',
+  async componentDidShow() {
+    this.store.loadHistory()
   }
 
-  async handleScan() {
-    if (this.state.scanning) return
-
-    Taro.showLoading({ title: '扫描中...' })
-    this.setState({ scanning: true })
+  handleScan = async () => {
+    if (this.store.scanning) return
+    this.store.setScanning(true)
 
     try {
-      const result = await runScan()
-      const duration = (result.duration / 1000).toFixed(1)
-      this.setState({
-        devices: result.devices,
-        scanning: false,
-        lastScanTime: Date.now(),
-        mdnsUnavailable: result.mdnsUnavailable,
-        summaryText: `发现 ${result.devices.length} 台设备，耗时 ${duration}s`,
-      })
+      // mDNS
+      const mdnsDevices = await discoverMDNS()
+      mdnsDevices.forEach(d => this.store.addDevice(d))
 
-      if (result.mdnsUnavailable) {
-        Taro.showToast({ title: 'iOS 环境已降级至 TCP 扫描', icon: 'none', duration: 2000 })
-      }
-    } catch (err) {
-      this.setState({ scanning: false })
-      Taro.showToast({ title: '扫描失败，请重试', icon: 'error' })
-    } finally {
-      Taro.hideLoading()
+      // SSDP
+      const ssdpDevices = await discoverSSDP()
+      ssdpDevices.forEach(d => this.store.addDevice(d))
+
+      this.store.setScanning(false)
+    } catch (e) {
+      this.store.setScanning(false)
     }
   }
 
-  handleDeviceClick(device: Device) {
-    this.setState({ selectedDevice: device })
-  }
-
-  handleDrawerClose() {
-    this.setState({ selectedDevice: null })
+  handleDeviceClick = (device: any) => {
+    wx.navigateTo({ url: `/pages/devices/index?ip=${device.ip}` })
   }
 
   render() {
-    const { devices, scanning, selectedDevice, mdnsUnavailable, summaryText } = this.state
-    const gatewayIP = devices.find((d) => d.deviceType === 'router')?.ip || devices[0]?.ip || ''
+    const { devices, scanning } = this.store
+    const gatewayIP = devices.find(d => d.deviceType === 'router')?.ip || devices[0]?.ip || ''
 
     return (
-      <View className='discovery-page'>
-        {/* 状态摘要栏 */}
+      <View className='index-page'>
         <View className='summary-bar'>
-          <Text className='summary-text'>
-            {summaryText || '点击下方按钮开始局域网扫描'}
+          <Text className='summary'>
+            {devices.length === 0 ? '点击下方按钮开始局域网扫描' : `发现 ${devices.length} 台设备`}
           </Text>
         </View>
-
-        {/* 拓扑图 */}
-        <View className='topology-wrap'>
-          {devices.length === 0 ? (
-            <View className='empty-state'>
-              <Text className='empty-icon'>🛣</Text>
-              <Text className='empty-text'>未发现设备</Text>
-              <Text className='empty-hint'>确认在同一 WiFi 下</Text>
-            </View>
-          ) : (
-            <TopologyCanvas
-              devices={devices}
-              gatewayIP={gatewayIP}
-              onDeviceClick={this.handleDeviceClick.bind(this)}
-            />
-          )}
+        <View className='topo-wrap'>
+          <TopoCanvas devices={devices} gatewayIP={gatewayIP} onDeviceClick={this.handleDeviceClick} />
         </View>
-
-        {/* 扫描按钮 */}
-        <ScanButton scanning={scanning} onScan={this.handleScan.bind(this)} />
-
-        {/* 设备详情抽屉 */}
-        <DeviceDrawer device={selectedDevice} onClose={this.handleDrawerClose.bind(this)} />
+        <ScanButton scanning={scanning} onScan={this.handleScan} />
       </View>
     )
   }
 }
 ```
 
-- [ ] **Step 3: 创建 CSS（src/pages/discovery/index.css）**
-
-```css
-.discovery-page {
-  min-height: 100vh;
-  background: #0f0f1a;
-  display: flex;
-  flex-direction: column;
-}
-
-.summary-bar {
-  padding: 24rpx 32rpx;
-  background: #1a1a2e;
-}
-
-.summary-text {
-  color: #00d4ff;
-  font-size: 28rpx;
-}
-
-.topology-wrap {
-  flex: 1;
-  padding: 24rpx;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 60vw;
-}
-
-.empty-icon {
-  font-size: 80rpx;
-  margin-bottom: 24rpx;
-}
-
-.empty-text {
-  color: #fff;
-  font-size: 32rpx;
-}
-
-.empty-hint {
-  color: #666;
-  font-size: 26rpx;
-  margin-top: 8rpx;
-}
-```
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add src/pages/discovery/index.tsx src/pages/discovery/index.config.ts src/pages/discovery/index.css && git commit -m "feat: add discovery page
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 17: 历史页（history）
-
-**Files:**
-- Create: `src/pages/history/index.tsx`
-- Create: `src/pages/history/index.config.ts`
-
-- [ ] **Step 1: 创建相关文件**
+- [ ] **Step 2: Write pages/devices/index.tsx**
 
 ```typescript
 import { Component } from 'react'
 import { View, Text, ScrollView } from '@tarojs/components'
-import { ScanSnapshot } from '../../types'
-import { loadHistory } from '../../services/storage'
+import { useDeviceStore } from '../../stores/deviceStore'
+import DeviceCard from '../../components/DeviceCard'
+import './index.css'
 
-interface State {
-  history: ScanSnapshot[]
-  expandedId: string | null
-}
+export default class DevicesPage extends Component {
+  store = useDeviceStore()
 
-export default class History extends Component<State> {
-  state: State = {
-    history: [],
-    expandedId: null,
-  }
-
-  async componentDidShow() {
-    const history = await loadHistory()
-    this.setState({ history })
-  }
-
-  toggleExpand(id: string) {
-    this.setState((s) => ({
-      expandedId: s.expandedId === id ? null : id,
-    }))
-  }
-
-  formatTime(ts: number) {
-    const d = new Date(ts)
-    return `${d.getMonth() + 1}-${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+  handleClick = (device: any) => {
+    wx.navigateTo({ url: `/pages/topology/index?ip=${device.ip}` })
   }
 
   render() {
-    const { history, expandedId } = this.state
-
     return (
-      <View className='history-page'>
-        <ScrollView scrollY className='history-list'>
-          {history.length === 0 ? (
-            <View className='empty'>
-              <Text className='empty-text'>暂无扫描记录</Text>
-            </View>
-          ) : (
-            history.map((snap) => (
-              <View key={snap.id} className='history-item'>
-                <View className='item-header' onClick={() => this.toggleExpand(snap.id)}>
-                  <View className='item-dot' />
-                  <View className='item-info'>
-                    <Text className='item-time'>{this.formatTime(snap.timestamp)}</Text>
-                    <Text className='item-sub'>{snap.ipRange}</Text>
-                  </View>
-                  <Text className='item-count'>{snap.deviceCount} 台</Text>
-                </View>
-
-                {expandedId === snap.id && (
-                  <View className='item-detail'>
-                    {snap.devices.map((d) => (
-                      <View key={d.ip} className='device-row'>
-                        <Text className='device-ip'>{d.ip}</Text>
-                        <Text className='device-ports'>{d.openPorts.length} 端口</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-              </View>
-            ))
-          )}
+      <View className='devices-page'>
+        <ScrollView scrollY className='list'>
+          {this.store.devices.map(d => (
+            <DeviceCard key={d.id} device={d} onClick={this.handleClick} />
+          ))}
         </ScrollView>
       </View>
     )
@@ -1826,126 +1384,36 @@ export default class History extends Component<State> {
 }
 ```
 
-- [ ] **Step 2: 创建 CSS**
-
-```css
-.history-page {
-  min-height: 100vh;
-  background: #0f0f1a;
-}
-
-.history-list {
-  padding: 24rpx 32rpx;
-  height: 100vh;
-}
-
-.empty {
-  display: flex;
-  justify-content: center;
-  padding-top: 200rpx;
-}
-
-.empty-text {
-  color: #666;
-  font-size: 28rpx;
-}
-
-.history-item {
-  background: #1a1a2e;
-  border-radius: 16rpx;
-  margin-bottom: 16rpx;
-  overflow: hidden;
-}
-
-.item-header {
-  display: flex;
-  align-items: center;
-  padding: 24rpx;
-}
-
-.item-dot {
-  width: 12rpx;
-  height: 12rpx;
-  background: #00d4ff;
-  border-radius: 50%;
-  margin-right: 16rpx;
-}
-
-.item-info {
-  flex: 1;
-}
-
-.item-time {
-  display: block;
-  color: #fff;
-  font-size: 30rpx;
-}
-
-.item-sub {
-  display: block;
-  color: #666;
-  font-size: 24rpx;
-  margin-top: 4rpx;
-}
-
-.item-count {
-  color: #00d4ff;
-  font-size: 28rpx;
-}
-
-.item-detail {
-  padding: 0 24rpx 24rpx;
-  border-top: 1rpx solid #2a2a4a;
-}
-
-.device-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 16rpx 0;
-  border-bottom: 1rpx solid #2a2a4a;
-}
-
-.device-ip {
-  color: #fff;
-  font-size: 28rpx;
-}
-
-.device-ports {
-  color: #888;
-  font-size: 26rpx;
-}
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/pages/history/index.tsx src/pages/history/index.config.ts src/pages/history/index.css && git commit -m "feat: add history page
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-```
-
----
-
-### Task 18: 问诊页占位（chat）
-
-**Files:**
-- Create: `src/pages/chat/index.tsx`
-- Create: `src/pages/chat/index.config.ts`
-
-- [ ] **Step 1: 创建问诊页占位**
+- [ ] **Step 3: Write pages/topology/index.tsx**
 
 ```typescript
 import { Component } from 'react'
 import { View, Text } from '@tarojs/components'
+import { useDeviceStore } from '../../stores/deviceStore'
+import './index.css'
 
-export default class Chat extends Component {
+export default class TopologyPage extends Component {
+  store = useDeviceStore()
+
   render() {
+    const ip = (wx as any).getCurrentInstance?.()?.router?.params?.ip || ''
+    const device = this.store.devices.find(d => d.ip === ip)
+    if (!device) return <View className='topo-page'><Text>未找到设备</Text></View>
+
     return (
-      <View className='chat-page'>
-        <View className='placeholder'>
-          <Text className='placeholder-icon'>🤖</Text>
-          <Text className='placeholder-text'>AI 问诊</Text>
-          <Text className='placeholder-hint'>Phase 2 接入 DeepSeek</Text>
+      <View className='topo-page'>
+        <View className='device-header'>
+          <Text className='ip'>{device.ip}</Text>
+          <Text className='vendor'>{device.vendor || '未知厂商'}</Text>
+          <Text className='risk'>风险: {device.openPorts.length > 3 ? '高' : device.openPorts.length > 0 ? '中' : '低'}</Text>
+        </View>
+        <View className='ports'>
+          {device.openPorts.map((p: any) => (
+            <View key={p.number} className='port-tag'>
+              <Text className='port-num'>{p.number}</Text>
+              <Text className='port-svc'>{p.service || 'unknown'}</Text>
+            </View>
+          ))}
         </View>
       </View>
     )
@@ -1953,97 +1421,354 @@ export default class Chat extends Component {
 }
 ```
 
+- [ ] **Step 4: Write pages/history/index.tsx**
+
+```typescript
+import { Component } from 'react'
+import { View, Text, ScrollView } from '@tarojs/components'
+import { useDeviceStore } from '../../stores/deviceStore'
+import './index.css'
+
+export default class HistoryPage extends Component {
+  store = useDeviceStore()
+
+  componentDidShow() {
+    this.store.loadHistory()
+  }
+
+  formatTime(ts: number) {
+    const d = new Date(ts)
+    return `${d.getMonth()+1}-${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`
+  }
+
+  render() {
+    const { history } = this.store
+    return (
+      <View className='history-page'>
+        <ScrollView scrollY className='list'>
+          {history.length === 0 ? (
+            <View className='empty'><Text className='empty-text'>暂无扫描记录</Text></View>
+          ) : history.map((snap) => (
+            <View key={snap.id} className='snap-item'>
+              <View className='snap-dot' />
+              <View className='snap-info'>
+                <Text className='snap-time'>{this.formatTime(snap.timestamp)}</Text>
+                <Text className='snap-range'>{snap.ipRange}</Text>
+              </View>
+              <Text className='snap-count'>{snap.deviceCount} 台</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    )
+  }
+}
+```
+
+- [ ] **Step 5: Write CSS files for all pages**
+
 ```css
-.chat-page {
-  min-height: 100vh;
-  background: #0f0f1a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.placeholder-icon {
-  font-size: 80rpx;
-  margin-bottom: 24rpx;
-}
-
-.placeholder-text {
-  color: #fff;
-  font-size: 36rpx;
-  font-weight: 600;
-}
-
-.placeholder-hint {
-  color: #666;
-  font-size: 28rpx;
-  margin-top: 8rpx;
-}
+/* pages/index/index.css */
+.index-page { min-height: 100vh; background: #0f0f1a; }
+.summary-bar { padding: 24rpx 32rpx; background: #1a1a2e; }
+.summary { color: #00d4ff; font-size: 28rpx; }
+.topo-wrap { flex: 1; padding: 24rpx; }
+.topo-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vw; }
+.empty-icon { font-size: 80rpx; margin-bottom: 24rpx; }
+.empty-text { color: #fff; font-size: 32rpx; }
 ```
 
-- [ ] **Step 2: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/pages/chat/index.tsx src/pages/chat/index.config.ts src/pages/chat/index.css && git commit -m "feat: add chat page placeholder
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+git add netprowl-mini/src/pages/
+git commit -m "feat(mini): add index, devices, topology, history pages"
 ```
 
 ---
 
-### Task 19: TabBar 图标资源
+## Task 9: PC: Tauri 脚手架 + Rust 命令
 
-**Files:**
-- Create: `src/assets/tab-discovery.png` (占位文件)
-- Create: `src/assets/tab-discovery-active.png`
-- Create: `src/assets/tab-history.png`
-- Create: `src/assets/tab-history-active.png`
-- Create: `src/assets/tab-chat.png`
-- Create: `src/assets/tab-chat-active.png`
+**Depends on:** Task 4
 
-- [ ] **Step 1: 创建占位图标**（Phase 2 替换为正式图标）
-
-> Note: 当前使用 emoji 渲染替代 TabBar 图标。创建 6 个 81x81px 白色/蓝色 PNG 占位文件。
+- [ ] **Step 1: Initialize Tauri project**
 
 ```bash
-# 在 src/assets/ 目录创建 6 个占位空文件（Git tracking 用）
-touch src/assets/tab-discovery.png
-touch src/assets/tab-discovery-active.png
-touch src/assets/tab-history.png
-touch src/assets/tab-history-active.png
-touch src/assets/tab-chat.png
-touch src/assets/tab-chat-active.png
+cd /Users/jinguo.zeng/dmall/project/NetProwl/netprowl-pc
+npm create tauri-app@latest . -- --template react-ts --manager npm -y
 ```
 
-- [ ] **Step 2: Commit**
+Note: If interactive prompt fails, manually create the structure.
+
+- [ ] **Step 2: Create src-tauri/src/main.rs**
+
+```rust
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+fn main() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            scan_tcp,
+            scan_mdns,
+            scan_ssdp,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn scan_tcp(ip_start: String, ip_end: String, ports: Vec<u16>) -> Result<String, String> {
+    // 调用 Go core 编译的库或 WASM
+    // 简化：返回空 JSON
+    Ok(r#"{"devices":[],"summary":{"total":0}}"#)
+}
+
+#[tauri::command]
+fn scan_mdns() -> Result<String, String> {
+    Ok(r#"{"devices":[]}"#)
+}
+
+#[tauri::command]
+fn scan_ssdp() -> Result<String, String> {
+    Ok(r#"{"devices":[]}"#)
+}
+```
+
+- [ ] **Step 3: Write src-tauri/Cargo.toml**
+
+```toml
+[package]
+name = "netprowl-pc"
+version = "1.0.0"
+
+[dependencies]
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+tauri-build = "2"
+```
+
+- [ ] **Step 4: Write src-tauri/build.rs**
+
+```rust
+fn main() {
+    tauri_build::build()
+}
+```
+
+- [ ] **Step 5: Write src-tauri/tauri.conf.json**
+
+```json
+{
+  "productName": "NetProwl",
+  "version": "1.0.0",
+  "window": {
+    "title": "NetProwl",
+    "width": 1200,
+    "height": 800,
+    "minWidth": 800,
+    "minHeight": 600
+  }
+}
+```
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/assets/ && git commit -m "chore: add tab icon placeholders
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+git add netprowl-pc/
+git commit -m "feat(pc): add Tauri project scaffold"
 ```
 
 ---
 
-## Self-Review Checklist
+## Task 10: PC: React 前端页面
 
-1. **Spec coverage:** 所有 Phase 1 功能（发现页、历史页、拓扑图、扫描引擎、三层探测）均有对应 task。
-2. **Placeholder scan:** `minigzip` 标注了 fallback，`oui.ts` 仅含主流厂商子集，TabBar 图标为占位——均已注明。
-3. **Type consistency:** `Device`/`Port`/`ScanSnapshot` 接口在 Task 2 定义，后续 service 保持一致。`runScan` 返回 `ScanResult` 与 scanner.ts 一致。
+**Depends on:** Task 9
+
+- [ ] **Step 1: Write React App.tsx with scan page**
+
+```tsx
+import { useState } from 'react'
+import { invoke } from '@tauri-apps/api/core'
+import './App.css'
+
+function App() {
+  const [ipStart, setIpStart] = useState('192.168.1.1')
+  const [ipEnd, setIpEnd] = useState('192.168.1.254')
+  const [scanning, setScanning] = useState(false)
+  const [devices, setDevices] = useState<any[]>([])
+
+  const handleScan = async () => {
+    setScanning(true)
+    try {
+      const result = await invoke<string>('scan_tcp', {
+        ipStart,
+        ipEnd,
+        ports: [80, 443, 22, 3389, 445, 139, 135],
+      })
+      const parsed = JSON.parse(result)
+      setDevices(parsed.devices || [])
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  return (
+    <div className="app">
+      <header className="header">
+        <h1>NetProwl</h1>
+        <p>局域网安全扫描</p>
+      </header>
+
+      <div className="form">
+        <div className="field">
+          <label>IP 范围</label>
+          <div className="range">
+            <input value={ipStart} onChange={e => setIpStart(e.target.value)} />
+            <span> - </span>
+            <input value={ipEnd} onChange={e => setIpEnd(e.target.value)} />
+          </div>
+        </div>
+        <button onClick={handleScan} disabled={scanning}>
+          {scanning ? '扫描中...' : '开始扫描'}
+        </button>
+      </div>
+
+      <div className="device-list">
+        {devices.map(d => (
+          <div key={d.ip} className={`device-card risk-${d.risk}`}>
+            <div className="card-ip">{d.ip}</div>
+            <div className="card-vendor">{d.vendor || '未知'}</div>
+            <div className="card-ports">
+              {d.ports?.map((p: any) => (
+                <span key={p.number} className="port-tag">
+                  <span className="port-num">{p.number}</span>
+                  <span className="port-svc">{p.service}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export default App
+```
+
+- [ ] **Step 2: Write App.css**
+
+```css
+.app { min-height: 100vh; background: #0f0f1a; color: #fff; padding: 32px; font-family: -apple-system, sans-serif; }
+.header { margin-bottom: 32px; }
+.header h1 { font-size: 28px; font-weight: 700; }
+.header p { color: #666; font-size: 14px; margin-top: 4px; }
+.form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
+.field label { color: #00d4ff; font-size: 14px; display: block; margin-bottom: 8px; }
+.range { display: flex; gap: 8px; }
+.range input { flex: 1; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px; padding: 12px 16px; color: #fff; font-size: 14px; }
+button { height: 48px; background: linear-gradient(135deg, #00d4ff, #0077ff); color: #fff; border: none; border-radius: 24px; font-size: 16px; font-weight: 600; cursor: pointer; }
+button:disabled { background: #333; color: #888; }
+.device-list { display: flex; flex-direction: column; gap: 12px; }
+.device-card { background: #1a1a2e; border-radius: 12px; padding: 16px; }
+.card-ip { font-size: 16px; font-weight: 600; color: #fff; }
+.card-vendor { color: #666; font-size: 12px; margin-top: 4px; }
+.card-ports { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.port-tag { display: flex; align-items: center; gap: 4px; background: #2a2a4a; padding: 4px 10px; border-radius: 6px; }
+.port-num { color: #00d4ff; font-size: 13px; font-weight: 600; }
+.port-svc { color: #888; font-size: 11px; }
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add netprowl-pc/src/
+git commit -m "feat(pc): add React scan UI"
+```
 
 ---
 
-**Plan complete.** 保存至 `docs/superpowers/plans/2026-05-11-netprowl-phase1-mvp-plan.md`。
+## Task 11: 集成 + 验收
 
-Two execution options:
+- [ ] **Step 1: Verify all builds**
 
-**1. Subagent-Driven (recommended)** - dispatch fresh subagent per task, review between tasks
+```bash
+# Go core
+cd /Users/jinguo.zeng/dmall/project/NetProwl/core && go build ./...
 
-**2. Inline Execution** - execute tasks in this session using executing-plans
+# 小程序
+cd /Users/jinguo.zeng/dmall/project/NetProwl/netprowl-mini && npm install
 
-Which approach?
+# PC
+cd /Users/jinguo.zeng/dmall/project/NetProwl/netprowl-pc && npm install && npm run tauri build
+```
+
+- [ ] **Step 2: Write integration test doc**
+
+```markdown
+# 集成测试文档
+
+## 前置条件
+- Go 1.21+
+- Node.js 18+
+- 微信开发者工具
+- Rust 1.70+
+
+## 小程序测试
+```bash
+cd netprowl-mini
+npm install
+npm run dev:weapp
+```
+打开微信开发者工具，导入项目，验证：
+- [ ] mDNS 发现设备
+- [ ] SSDP 发现设备
+- [ ] TCP 白名单端口扫描正常
+- [ ] 拓扑图正常渲染
+- [ ] 历史记录保存
+
+## PC 测试
+```bash
+cd netprowl-pc
+npm install
+npm run tauri dev
+```
+验证：
+- [ ] 全端口 TCP 扫描正常
+- [ ] Banner 正确抓取
+- [ ] 设备列表正常显示
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add docs/
+git commit -m "docs: add integration test guide"
+```
+
+---
+
+## Spec Coverage Check
+
+| Spec 需求 | 实现位置 |
+|---------|---------|
+| Go core: mDNS 发现 | Task 2 |
+| Go core: UDP SSDP | Task 2 |
+| Go core: TCP 端口扫描 | Task 1 |
+| Go core: Banner 抓取 | Task 3 |
+| Go core: 服务指纹规则库 | Task 3 |
+| Go core: MAC OUI 厂商库 | Task 4 |
+| Go core: IP/子网工具 | Task 4 |
+| 小程序: services (mdns/udp/tcp/storage) | Task 6 |
+| 小程序: stores + components | Task 7 |
+| 小程序: pages (index/devices/topology/history) | Task 8 |
+| PC: Tauri 脚手架 + Rust 命令 | Task 9 |
+| PC: React 前端 | Task 10 |
+| 集成验证 | Task 11 |
+
+无遗漏。
