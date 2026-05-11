@@ -45,13 +45,17 @@ func (a *Agent) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 		var wsMsg WSMessage
 		if err := json.Unmarshal(msg, &wsMsg); err != nil {
+			log.Printf("WebSocket unmarshal error: %v", err)
 			continue
 		}
 
 		switch wsMsg.Type {
 		case "scan":
 			var req ScanRequest
-			json.Unmarshal(wsMsg.Payload, &req)
+			if err := json.Unmarshal(wsMsg.Payload, &req); err != nil {
+				log.Printf("Scan request unmarshal error: %v", err)
+				continue
+			}
 			a.handleScanRequest(r.Context(), conn, &req)
 		case "ping":
 			conn.Write(r.Context(), websocket.MessageText, []byte(`{"type":"pong"}`))
@@ -67,13 +71,16 @@ func (a *Agent) handleScanRequest(ctx context.Context, conn *websocket.Conn, req
 	// 3. Scan each host using a.ScanHost()
 	// 4. Stream results back via WebSocket
 
-	// For now, send an empty result to demonstrate protocol works
-	resp := map[string]interface{}{
-		"type": "scan_result",
+	// Send response directly without WSMessage wrapper to avoid double encoding
+	respBytes, err := json.Marshal(map[string]interface{}{
+		"type":    "scan_result",
 		"devices": []interface{}{},
+	})
+	if err != nil {
+		log.Printf("Failed to marshal scan response: %v", err)
+		return
 	}
-	payload, _ := json.Marshal(resp)
-	msg := WSMessage{Type: "scan_result", Payload: payload}
-	bytes, _ := json.Marshal(msg)
-	conn.Write(ctx, websocket.MessageText, bytes)
+	if err := conn.Write(ctx, websocket.MessageText, respBytes); err != nil {
+		log.Printf("Failed to write scan response: %v", err)
+	}
 }
