@@ -23,10 +23,10 @@ func (a *Agent) ScanHost(ip string, ports []int) ([]ScanResult, error) {
 	sem := make(chan struct{}, a.config.ScanConcurrency)
 
 	for _, port := range ports {
+		sem <- struct{}{} // acquire BEFORE wg.Add to avoid deadlock if panic occurs before wg.Done
 		wg.Add(1)
 		go func(port int) {
 			defer wg.Done()
-			sem <- struct{}{}
 			defer func() { <-sem }()
 
 			result := a.probePort(ip, port)
@@ -66,8 +66,8 @@ func (a *Agent) grabBanner(conn net.Conn, port int) string {
 	}
 
 	buf := make([]byte, 1024)
-	n, _ := conn.Read(buf)
-	if n > 0 {
+	n, err := conn.Read(buf)
+	if err != nil && n > 0 {
 		return strings.TrimSpace(string(buf[:n]))
 	}
 	return ""
