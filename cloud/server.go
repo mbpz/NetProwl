@@ -24,7 +24,20 @@ func main() {
 
 	// Report generation API
 	r.POST("/api/report", func(c *gin.Context) {
-		c.JSON(200, gin.H{"message": "TODO"})
+		var req ReportRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(400, gin.H{"error": "invalid request"})
+			return
+		}
+
+		prompt := buildReportPrompt(req.ScanData)
+		result, err := CallDeepSeekReasoner(prompt)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(200, gin.H{"report": result})
 	})
 
 	log.Printf("Cloud server starting on :%d", cfg.ListenPort)
