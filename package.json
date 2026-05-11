@@ -1,0 +1,18 @@
+{
+  "name": "netprowl",
+  "version": "1.0.0",
+  "scripts": {
+    "dev:weapp": "taro build --type weapp --watch",
+    "build:weapp": "taro build --type weapp"
+  },
+  "dependencies": {
+    "@tarojs/taro": "4.x",
+    "@tarojs/plugin-framework-react": "4.x",
+    "react": "18.x"
+  },
+  "devDependencies": {
+    "@tarojs/cli": "4.x",
+    "@types/react": "18.x",
+    "typescript": "5.x"
+  }
+}
