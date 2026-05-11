@@ -1,0 +1,30 @@
+.port-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.port-item {
+  display: flex;
+  align-items: center;
+  background: #1e1e3a;
+  border-radius: 8rpx;
+  padding: 8rpx 16rpx;
+}
+
+.port-num {
+  color: #00d4ff;
+  font-size: 28rpx;
+  font-weight: 600;
+  margin-right: 8rpx;
+}
+
+.port-service {
+  color: #999;
+  font-size: 24rpx;
+}
+
+.port-empty {
+  color: #666;
+  font-size: 26rpx;
+}
