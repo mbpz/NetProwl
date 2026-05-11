@@ -1,8 +1,8 @@
 # NetProwl Phase 1 MVP 规格书
 
-> **版本**：v1.0
-> **更新**：2025-05-11
-> **状态**：草稿
+> **版本**：v1.2
+> **更新**：2026-05-11
+> **状态**：待评审
 
 ---
 
@@ -16,10 +16,10 @@
 
 | 版本 | 平台 | 说明 |
 |------|------|------|
-| 微信小程序版 | 微信小程序 | 扫码即用，API 限制多（Phase 2+ 解锁 Probe Agent）|
-| PC 客户端版 | Tauri/Electron | 功能完整，无 API 限制 |
+| 微信小程序版 | 微信小程序 | 扫码即用，受微信 API 限制（白名单端口/mDNS）|
+| PC 客户端版 | Tauri/Electron | 用户电脑安装，全部功能本地运行，无任何限制 |
 
-**两版本共享同一核心扫描能力（Go），仅前端不同。**
+**两者是完全独立的两个产品，共享部分代码但各自完整。**
 
 ---
 
@@ -27,8 +27,9 @@
 
 | 层 | 技术 | 说明 |
 |----|------|------|
-| 前端 | Taro + React | 微信小程序，Canvas 拓扑图 |
-| 本地能力 | 微信小程序 API | mDNS + UDP SSDP + 白名单 TCP |
+| 核心扫描 | Go | mDNS/UDP/TCP/Banner，共享给两版本 |
+| 小程序前端 | Taro + React | 微信小程序 |
+| PC 前端 | React + TypeScript | Tauri 桌面端 |
 
 **架构图**：
 
@@ -43,78 +44,114 @@
               ▼                                 ▼
 ┌─────────────────────────┐         ┌─────────────────────────┐
 │     微信小程序版          │         │      PC 客户端版         │
-│  Taro + React           │         │  Tauri/Electron         │
-│  Canvas 拓扑图           │         │  完整功能无限制         │
-│  Storage 历史           │         │  桌面 UI                │
+│  Taro + React           │         │  Tauri + React          │
+│  白名单端口（API 限制）   │         │  全端口（无限制）         │
+│  Canvas 拓扑图           │         │  Canvas 拓扑图           │
+│  Storage 历史           │         │  本地 SQLite            │
 └─────────────────────────┘         └─────────────────────────┘
 ```
 
 **设计原则**：
-- 核心能力（Go）共享，两版本前端独立
+- 核心扫描能力（Go）共享，两版本前端独立
 - 小程序版：轻量拉新，受微信 API 限制
 - PC 版：功能完整，无限制
 
 ---
 
-## 3. 前端（微信小程序 / Taro）
+## 3. 核心扫描能力（Go）
 
 ### 3.1 技术选型
 
-- **框架**：Taro 4.x + React 18
-- **编译目标**：微信小程序
-- **状态管理**：Zustand（轻量）
-- **Canvas**：原生 Canvas API（拓扑图绘制）
+- **语言**：Go 1.21+
+- **并发**：goroutine + channel
+- **输出**：共享库（.so），可供小程序（wasm）或 PC 调用
 
 ### 3.2 功能列表
 
 | 功能 | 说明 |
 |------|------|
-| F1-1 · mDNS 服务扫描 | `wx.startLocalServiceDiscovery` 发现 `_http._tcp` 等 |
-| F1-2 · UDP SSDP 探测 | `wx.createUDPSocket` 发送 M-SEARCH 广播 |
-| F1-3 · TCP 端口探测 | `wx.createTCPSocket` 探测白名单端口（80/443/8080/554/5000/9000） |
-| F1-4 · 设备拓扑图 | Canvas 绘制，设备图标区分类型，MAC OUI 识别厂商 |
-| F1-5 · 本地 IP 感知 | `wx.getNetworkType` + `wx.getLocalIPAddress` 推断子网 |
-| F1-6 · 扫描历史记录 | `wx.setStorage` 持久化，JSON gzip 压缩 |
+| C1 · mDNS 发现 | 发现局域网 mDNS 服务（`_http._tcp` 等） |
+| C2 · UDP SSDP | M-SEARCH 广播，解析 UPnP 设备 |
+| C3 · TCP 端口扫描 | 并发扫描，支持全端口 |
+| C4 · Banner 抓取 | 协议探针，读取服务banner |
+| C5 · 服务指纹 | 内置规则库，匹配服务类型 |
+| C6 · MAC OUI | 厂商识别（离线库） |
 
 ### 3.3 文件结构
+
+```
+core/
+├── scanner/
+│   ├── mdns.go          # mDNS 发现
+│   ├── ssdp.go          # UDP SSDP
+│   ├── tcp.go           # TCP 端口扫描
+│   ├── banner.go        # Banner 抓取
+│   └── registry.go      # 服务指纹规则库
+├── util/
+│   ├── oui.go           # MAC OUI 厂商库
+│   └── ip.go            # IP/子网工具
+└── go.mod
+```
+
+---
+
+## 4. 微信小程序版
+
+### 4.1 技术选型
+
+- **框架**：Taro 4.x + React 18
+- **编译目标**：微信小程序
+- **状态管理**：Zustand
+- **Canvas**：原生 API
+
+### 4.2 功能列表
+
+| 功能 | 说明 |
+|------|------|
+| F1-1 · mDNS 服务扫描 | `wx.startLocalServiceDiscovery` |
+| F1-2 · UDP SSDP 探测 | `wx.createUDPSocket` 发送 M-SEARCH |
+| F1-3 · TCP 端口探测 | 白名单端口（80/443/8080/554/5000/9000） |
+| F1-4 · 设备拓扑图 | Canvas 绘制，MAC OUI 识别厂商 |
+| F1-5 · 本地 IP 感知 | `wx.getLocalIPAddress` 推断子网 |
+| F1-6 · 扫描历史记录 | `wx.setStorage` 持久化 |
+
+### 4.3 文件结构
 
 ```
 src/
 ├── pages/
 │   ├── index/           # 首页，扫描入口
-│   ├── devices/          # 设备列表
-│   ├── topology/         # 拓扑图
-│   └── history/          # 扫描历史
+│   ├── devices/         # 设备列表
+│   ├── topology/        # 拓扑图
+│   └── history/         # 扫描历史
 ├── components/
-│   ├── DeviceCard/       # 设备卡片
-│   ├── TopoCanvas/      # 拓扑图 Canvas 组件
-│   └── ScanButton/       # 扫描按钮
+│   ├── DeviceCard/
+│   ├── TopoCanvas/
+│   └── ScanButton/
 ├── services/
-│   ├── mdns.ts          # mDNS 发现
-│   ├── udp.ts           # UDP SSDP
-│   ├── tcp.ts           # TCP 端口探测
-│   └── storage.ts       # 本地存储
+│   ├── mdns.ts
+│   ├── udp.ts
+│   ├── tcp.ts
+│   └── storage.ts
 ├── stores/
-│   └── deviceStore.ts   # 设备状态
+│   └── deviceStore.ts
 └── utils/
-    ├── oui.ts           # MAC OUI 厂商库
-    └── ip.ts            # IP/子网工具
+    ├── oui.ts
+    └── ip.ts
 ```
 
-### 3.4 关键 API 设计
+### 4.4 关键 API 设计
 
 **mDNS 发现**：
 ```typescript
 wx.startLocalServiceDiscovery({
   serviceType: '_http._tcp',
-  success: () => {},
   fail: (err) => {
     if (err.errCode === -1) fallbackToTCPScan()
   }
 })
 
 wx.onLocalServiceFound((res) => {
-  // res: { serviceType, serviceName, ip, port, hostName }
   addDevice(res)
 })
 ```
@@ -123,7 +160,7 @@ wx.onLocalServiceFound((res) => {
 ```typescript
 const WHITE_PORTS = [80, 443, 8080, 554, 5000, 9000, 49152]
 
-async function probePorts(ip: string, ports: number[]): Promise<number[]> {
+async function probePorts(ip: string, ports: number[]) {
   const results: number[] = []
   for (const port of ports) {
     const socket = wx.createTCPSocket()
@@ -139,55 +176,108 @@ async function probePorts(ip: string, ports: number[]): Promise<number[]> {
 
 ---
 
-## 4. 数据流
+## 5. PC 客户端版（完整功能）
+
+### 5.1 技术选型
+
+- **框架**：Tauri 2.x（Rust 后端，比 Electron 轻量）
+- **前端**：React + TypeScript
+- **IPC**：Tauri commands（Rust ↔ React）
+
+### 5.2 定位
+
+用户电脑上安装，全部功能本地运行，无任何限制：
+- 无微信 API 限制
+- 无网络访问限制
+- 无端口黑名单
+
+### 5.3 功能列表
+
+| 功能 | 说明 |
+|------|------|
+| P1-1 · 完整端口扫描 | 全端口 TCP（1-65535），无限制 |
+| P1-2 · mDNS / UDP SSDP | 完整实现 |
+| P1-3 · 设备拓扑图 | Canvas，更流畅 |
+| P1-4 · Banner 抓取 | 全协议支持（HTTP/SSH/FTP/SMTP/MySQL 等）|
+| P1-5 · 服务指纹识别 | 内置规则库，协议识别 |
+| P1-6 · TLS 审计 | 证书检查、弱套件检测、过期检测 |
+| P1-7 · 扫描历史 | 本地 SQLite |
+| P1-8 · 报告导出 | PDF/JSON/HTML |
+
+### 5.4 文件结构
 
 ```
-用户操作小程序
-    │
-    ├─── mDNS（小程序直连，同局域网）
-    │         └── 设备列表（mDNS 服务发现）
-    │
-    ├─── UDP SSDP（小程序直连）
-    │         └── 智能设备列表（TV/摄像头/NAS）
-    │
-    ├─── TCP 端口探测（小程序直连，白名单端口）
-    │         └── 开放端口列表
-    │
-    └─── 本地存储（wx.setStorage）
-              └── 扫描历史记录
+netprowl-pc/
+├── src/                  # React 前端
+│   ├── pages/
+│   ├── components/
+│   └── stores/
+├── src-tauri/           # Rust 后端
+│   ├── main.rs
+│   ├── commands/
+│   └── scanner/         # Go 核心编译为 WASM 或直接集成
+└── Cargo.toml
 ```
-
-**Probe Agent 和云端中台移至 Phase 2+**。
 
 ---
 
-## 5. MVP 验收标准
+## 6. 数据流
 
+```
+用户操作
+    │
+    ├─── 微信小程序版
+    │         │
+    │         ├─── mDNS（wx.startLocalServiceDiscovery）
+    │         ├─── UDP SSDP（wx.createUDPSocket）
+    │         └─── TCP 白名单端口（wx.createTCPSocket）
+    │
+    └─── PC 客户端版
+              │
+              ├─── Go Core（mDNS/UDP/全端口 TCP）
+              ├─── Banner 抓取
+              └─── TLS 审计
+```
+
+---
+
+## 7. MVP 验收标准
+
+### 7.1 微信小程序版
 - [ ] iOS / Android 真机均能正常发现局域网设备
 - [ ] 设备拓扑图在 10+ 设备时不卡顿
 - [ ] 扫描全程不触发微信安全拦截
 - [ ] 历史记录可正常读写，不超存储上限（10MB）
 
+### 7.2 PC 客户端版
+- [ ] 全端口 TCP 扫描正常（100+ 并发）
+- [ ] Banner 抓取成功（HTTP/SSH/FTP 等）
+- [ ] 设备拓扑图流畅渲染 20+ 设备
+- [ ] 扫描历史正确存取
+
 ---
 
-## 6. Phase 1 里程碑
+## 8. Phase 1 里程碑
 
 | 周次 | 任务 |
 |------|------|
-| W1-2 | 技术可行性验证（真机 mDNS + TCP 测试） |
-| W3-4 | 核心扫描功能实现（小程序端） |
-| W5 | UI / 拓扑图实现 |
-| W6 | 内测 + Bug 修复 + 提交审核 |
+| W1-2 | 技术可行性验证（Go 核心 + 真机测试） |
+| W3-4 | Go 核心扫描能力完成 |
+| W5 | 小程序版 UI / 拓扑图 |
+| W6 | PC 客户端版 UI / 拓扑图 |
+| W7 | 两版本集成测试 + Bug 修复 |
 
 ---
 
-## 7. 未来扩展（Phase 2+）
+## 9. 未来扩展（Phase 2+）
 
 | 组件 | 说明 |
 |------|------|
-| Probe Agent | 可选部署，解锁全端口扫描 |
+| Probe Agent | 可选部署，解锁全端口扫描（小程序版） |
 | 云端中台 | DeepSeek AI / CVE 库 / 扫描历史云同步 |
+| 安全检测 | 默认凭据检测 / TLS 审计 / 未授权访问 |
+| 公网侦察 | Shodan/FOFA 集成 / 子域名枚举 |
 
 ---
 
-*规格书版本：v1.1 · NetProwl Phase 1 MVP（简化版）*
+*规格书版本：v1.2 · NetProwl Phase 1 MVP（双版本并行）*
