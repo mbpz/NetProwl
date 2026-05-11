@@ -87,9 +87,18 @@ func CallDeepSeekReasoner(prompt string) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read DeepSeek response body: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("DeepSeek API error %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
 	var dsResp DeepSeekResponse
-	json.Unmarshal(bodyBytes, &dsResp)
+	if err := json.Unmarshal(bodyBytes, &dsResp); err != nil {
+		return "", fmt.Errorf("failed to parse DeepSeek response: %w", err)
+	}
 	if len(dsResp.Choices) == 0 {
 		return "", fmt.Errorf("no response from DeepSeek")
 	}
