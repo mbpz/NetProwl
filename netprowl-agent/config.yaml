@@ -1,0 +1,9 @@
+port: 9787
+tls_cert: ./cert.pem
+tls_key: ./key.pem
+scan_concurrency: 200
+timeout_ms: 2000
+db_path: ./cache.db
+mDNS:
+  service_type: "_netprowl._tcp"
+  broadcast_interval: 30s
