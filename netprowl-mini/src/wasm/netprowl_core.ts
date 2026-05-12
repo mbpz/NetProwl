@@ -8,6 +8,10 @@ import init, {
   lookup_vendor,
   infer_subnet,
   expand_subnet,
+  discover_mdns,
+  discover_ssdp,
+  probe_tcp_ports,
+  scan_network,
 } from '../../core/pkg'
 
 let initialized = false
@@ -39,4 +43,21 @@ export async function wasmExpandSubnet(subnet: string): Promise<string[]> {
   } catch {
     return []
   }
+}
+
+// ============== Discovery ==============
+
+export async function wasmDiscoverMDNS(serviceTypes: string[], timeoutMs: number): Promise<string> {
+  await ensureInit()
+  return discover_mdns(JSON.stringify(serviceTypes), timeoutMs) as any
+}
+
+export async function wasmDiscoverSSDP(timeoutMs: number): Promise<string> {
+  await ensureInit()
+  return discover_ssdp(timeoutMs) as any
+}
+
+export async function wasmProbeTCPPorts(ip: string, ports: number[], timeoutMs: number): Promise<string> {
+  await ensureInit()
+  return probe_tcp_ports(ip, JSON.stringify(ports), timeoutMs) as any
 }
