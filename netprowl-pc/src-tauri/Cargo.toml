@@ -13,6 +13,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 
+# NetProwl Core — local path dependency for Rust scanner library
+netprowl-core = { path = "../../core" }
+
 # 网络
 dns-parser = "0.8"
 local-ip-address = "0.6"

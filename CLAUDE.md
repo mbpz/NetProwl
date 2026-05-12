@@ -1,17 +1,19 @@
 # NetProwl 开发约束
 
 **规格书**：`docs/superpowers/specs/2026-05-11-netprowl-phase1-design.md`
-所有开发必须遵循规格书 v1.2。
+所有开发必须遵循规格书 v1.3。
 
 **架构原则**：
 
 1. **Phase 1 双版本并行**
-   - 微信小程序版（netprowl-mini/）：Taro + React，受微信 API 限制
-   - PC 客户端版（netprowl-pc/）：Tauri + React，全部功能本地运行
+   - 微信小程序版（netprowl-mini/）：Taro + React，Rust WASM 受微信 API 限制
+   - PC 客户端版（netprowl-pc/）：Tauri + React，Rust 原生全部功能
 
-2. **Go 核心共享**（core/）
-   - mDNS / UDP SSDP / TCP 扫描 / Banner 抓取
+2. **Rust 核心统一**（core/）
+   - mDNS / UDP SSDP / TCP 扫描 / Banner 抓取 / OUI / 服务指纹
    - 两版本前端独立，核心能力复用
+   - PC：src-tauri/src 直接调用 core（native）
+   - 小程序：wasm-pack 编译 core 为 WASM 调用
 
 3. **Phase 2+ 才引入**
    - Probe Agent（可选部署）

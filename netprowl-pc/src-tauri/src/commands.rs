@@ -1,32 +1,26 @@
+//! Legacy command stubs — used by main.rs until full migration is complete.
+
+use crate::{Device, Port, PortState};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Device {
-    pub ip: String,
-    pub mac: Option<String>,
-    pub hostname: Option<String>,
-    pub vendor: Option<String>,
-    pub device_type: String,
-    pub os: String,
-    pub open_ports: Vec<Port>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Port {
-    pub port: u16,
-    pub service: String,
-    pub state: String,
+pub struct ScanOptions {
+    pub subnet: String,
+    pub concurrency: Option<u32>,
+    pub timeout_ms: Option<u64>,
+    pub full_ports: Option<bool>,
 }
 
 #[tauri::command]
-pub fn scan_network() -> Result<Vec<Device>, String> {
-    // TODO: 调用 Go core WASM
-    // 暂时返回空列表，后续集成
-    Ok(vec![])
+pub async fn scan_network(opts: ScanOptions) -> Result<Vec<Device>, String> {
+    // Delegate to lib.rs implementation via ScannerState
+    // This stub will be removed once main.rs is updated to use lib.rs directly
+    Err("use start_scan command from lib.rs".to_string())
 }
 
 #[tauri::command]
 pub fn get_local_ip() -> Result<String, String> {
-    // TODO: 获取本机 IP
-    Ok("192.168.1.1".to_string())
+    local_ip_address::local_ip()
+        .map(|ip| ip.to_string())
+        .map_err(|e| e.to_string())
 }
