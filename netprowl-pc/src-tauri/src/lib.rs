@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::io::{Read, Write};
 use std::net::{IpAddr, TcpStream};
 use std::time::Duration;
 use std::sync::Mutex;
@@ -43,11 +44,34 @@ impl Default for ScannerState {
 const WHITE_PORTS: &[u16] = &[80, 443, 8080, 8443, 554, 5000, 9000, 49152];
 const FULL_PORTS: &[u16] = &[21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 993, 995, 1433, 1521, 1723, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 9200, 27017];
 
+fn get_banner(ip: &str, port: u16, timeout: Duration) -> Option<String> {
+    if let Ok(addr) = ip.parse::<IpAddr>() {
+        if let Ok(mut stream) = TcpStream::connect_timeout(&std::net::SocketAddr::new(addr, port), timeout) {
+            stream.set_read_timeout(Some(timeout)).ok();
+            // Send HTTP request for web ports
+            if [80, 8080, 8443, 5000, 9000].contains(&port) {
+                let _ = stream.write_all(b"GET / HTTP/1.0\r\nHost: 0.0.0.0\r\n\r\n");
+            }
+            let mut buf = [0u8; 512];
+            if let Ok(n) = stream.read(&mut buf) {
+                if n > 0 {
+                    let banner = String::from_utf8_lossy(&buf[..n]).trim().to_string();
+                    if !banner.is_empty() {
+                        return Some(banner);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn probe_port(ip: &str, port: u16, timeout: Duration) -> Option<Port> {
     if let Ok(addr) = ip.parse::<IpAddr>() {
         let timeout_adj = Duration::from_millis(timeout.as_millis() as u64);
         if TcpStream::connect_timeout(&std::net::SocketAddr::new(addr, port), timeout_adj).is_ok() {
-            return Some(Port { port, state: "open".to_string(), service: None, banner: None });
+            let banner = get_banner(ip, port, timeout_adj);
+            return Some(Port { port, state: "open".to_string(), service: None, banner });
         }
     }
     None
