@@ -1,5 +1,31 @@
+use crate::cve::{query, CveResult};
 use crate::types::DeviceType;
 use once_cell::sync::Lazy;
+use rusqlite::Connection;
+use std::sync::Mutex;
+
+static CVE_CONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| Mutex::new(None));
+
+/// Initialize the CVE database connection (call once at startup)
+pub fn init_cve_db() -> Result<(), String> {
+    let conn = crate::cve::init_db().map_err(|e| format!("Failed to init CVE DB: {}", e))?;
+    let mut guard = CVE_CONN.lock().map_err(|e| e.to_string())?;
+    *guard = Some(conn);
+    Ok(())
+}
+
+/// Lookup CVEs for a given software name and version
+pub fn lookup_cve(software: &str, version: &str) -> Vec<CveResult> {
+    let guard = match CVE_CONN.lock() {
+        Ok(g) => g,
+        Err(_) => return Vec::new(),
+    };
+    let conn = match guard.as_ref() {
+        Some(c) => c,
+        None => return Vec::new(),
+    };
+    query(conn, software, version).unwrap_or_default()
+}
 
 pub struct ServiceRule {
     pub id: &'static str,

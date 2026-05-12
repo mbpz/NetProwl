@@ -10,6 +10,9 @@ pub mod scanner;
 pub mod util;
 pub mod consts;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod cve;
+
 pub use types::*;
 use wasm_bindgen::prelude::*;
 
