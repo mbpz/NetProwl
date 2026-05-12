@@ -1,18 +1,4 @@
-interface Port {
-  port: number
-  state: string
-  service?: string
-  banner?: string
-}
-
-interface Device {
-  ip: string
-  mac?: string
-  hostname?: string
-  vendor?: string
-  ports: Port[]
-  sources: string[]
-}
+import { Device } from '../stores/deviceStore'
 
 interface DeviceCardProps {
   device: Device
@@ -28,6 +14,7 @@ export function DeviceCard({ device }: DeviceCardProps) {
       <div className="device-body">
         {device.hostname && <div>Hostname: {device.hostname}</div>}
         {device.mac && <div>MAC: {device.mac}</div>}
+        <div>Type: {device.device_type || 'unknown'}</div>
         {device.ports.length > 0 && (
           <div className="ports">
             <span>开放端口: </span>

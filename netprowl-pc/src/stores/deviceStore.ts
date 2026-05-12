@@ -1,17 +1,18 @@
 import { create } from 'zustand'
 
-interface Port {
+export interface Port {
   port: number
+  service: string | null
   state: string
-  service?: string
-  banner?: string
+  banner: string | null
 }
 
-interface Device {
+export interface Device {
   ip: string
-  mac?: string
-  hostname?: string
-  vendor?: string
+  mac: string | null
+  hostname: string | null
+  vendor: string | null
+  device_type: string | null
   ports: Port[]
   sources: string[]
 }
