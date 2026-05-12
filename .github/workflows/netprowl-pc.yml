@@ -69,7 +69,12 @@ jobs:
           cache-dependency-path: netprowl-pc/package-lock.json
 
       - name: Install dependencies
-        run: cd netprowl-pc && npm ci
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: cd netprowl-pc && npm ci
 
       - name: Build Tauri app
         run: |
