@@ -1,40 +1,16 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::net::{IpAddr, TcpStream};
-use std::process::Command;
-use std::time::Duration;
+mod scanner;
+
+use scanner::Device;
 use std::sync::Mutex;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Device {
-    #[serde(rename = "ip")]
-    pub ip: String,
-    #[serde(rename = "mac")]
-    pub mac: Option<String>,
-    #[serde(rename = "hostname")]
-    pub hostname: Option<String>,
-    #[serde(rename = "vendor")]
-    pub vendor: Option<String>,
-    #[serde(rename = "openPorts")]
-    pub ports: Vec<Port>,
-    #[serde(rename = "sources")]
-    pub sources: Vec<String>,
-}
+use crate::scanner::ip::expand_subnet;
+use crate::scanner::tcp::{self, TcpConfig};
+use crate::scanner::ssdp;
+use crate::scanner::mdns;
+use crate::scanner::registry::match_service;
+use crate::scanner::{WHITE_PORTS, FULL_PORTS};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Port {
-    #[serde(rename = "port")]
-    pub port: u16,
-    #[serde(rename = "state")]
-    pub state: String,
-    #[serde(rename = "service")]
-    pub service: Option<String>,
-    #[serde(rename = "banner")]
-    pub banner: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 pub struct ScanOptions {
     pub subnet: String,
     pub concurrency: Option<u32>,
@@ -52,167 +28,84 @@ impl Default for ScannerState {
     }
 }
 
-const WHITE_PORTS: &[u16] = &[80, 443, 8080, 8443, 554, 5000, 9000, 49152];
-const FULL_PORTS: &[u16] = &[21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 993, 995, 1433, 1521, 1723, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 9200, 27017];
-
-fn get_service_name(port: u16) -> Option<String> {
-    let map: HashMap<u16, &str> = [
-        (21, "FTP"), (22, "SSH"), (23, "Telnet"), (25, "SMTP"),
-        (53, "DNS"), (80, "HTTP"), (110, "POP3"), (143, "IMAP"),
-        (443, "HTTPS"), (445, "SMB"), (993, "IMAPS"), (995, "POP3S"),
-        (1433, "MSSQL"), (1521, "Oracle"), (1723, "PPTP"), (3306, "MySQL"),
-        (3389, "RDP"), (5432, "PostgreSQL"), (5900, "VNC"), (6379, "Redis"),
-        (8080, "HTTP-Alt"), (8443, "HTTPS-Alt"), (5000, "UPnP"), (9000, "Sonar"),
-        (49152, "Windows"), (554, "RTSP"), (9200, "Elasticsearch"), (27017, "MongoDB"),
-    ].iter().cloned().collect();
-    map.get(&port).map(|s| s.to_string())
-}
-
-fn run_go_cli(args: &[&str]) -> Result<String, String> {
-    let go_bin = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-        .map(|mut p| { p.push("../../../core/bin/netprowl"); p })
-        .unwrap_or_else(|| std::path::PathBuf::from("../../../core/bin/netprowl"));
-
-    let output = Command::new(&go_bin)
-        .args(args)
-        .output()
-        .map_err(|e| format!("failed to run go cli: {}", e))?;
-
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
-fn discover_go_devices(kind: &str) -> Result<Vec<Device>, String> {
-    let flag = match kind {
-        "mdns" => "--mdns",
-        "ssdp" => "--ssdp",
-        _ => return Err(format!("unknown discovery kind: {}", kind)),
-    };
-
-    let output = run_go_cli(&[flag])?;
-    let devices: Vec<Device> = serde_json::from_str(&output)
-        .map_err(|e| format!("failed to parse {} devices: {}", kind, e))?;
-    Ok(devices)
-}
-
-fn get_banner(ip: &str, port: u16, timeout: Duration) -> Option<String> {
-    if let Ok(addr) = ip.parse::<IpAddr>() {
-        if let Ok(mut stream) = TcpStream::connect_timeout(&std::net::SocketAddr::new(addr, port), timeout) {
-            stream.set_read_timeout(Some(timeout)).ok();
-            // Send HTTP request for web ports
-            if [80, 8080, 8443, 5000, 9000].contains(&port) {
-                let _ = stream.write_all(b"GET / HTTP/1.0\r\nHost: 0.0.0.0\r\n\r\n");
-            }
-            let mut buf = [0u8; 512];
-            if let Ok(n) = stream.read(&mut buf) {
-                if n > 0 {
-                    let banner = String::from_utf8_lossy(&buf[..n]).trim().to_string();
-                    if !banner.is_empty() {
-                        return Some(banner);
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
-fn probe_port(ip: &str, port: u16, timeout: Duration) -> Option<Port> {
-    if let Ok(addr) = ip.parse::<IpAddr>() {
-        let timeout_adj = Duration::from_millis(timeout.as_millis() as u64);
-        if TcpStream::connect_timeout(&std::net::SocketAddr::new(addr, port), timeout_adj).is_ok() {
-            let banner = get_banner(ip, port, timeout_adj);
-            let service = get_service_name(port);
-            return Some(Port { port, state: "open".to_string(), service, banner });
-        }
-    }
-    None
-}
-
 #[tauri::command]
 async fn start_scan(opts: ScanOptions, state: tauri::State<'_, ScannerState>) -> Result<Vec<Device>, String> {
-    let timeout = Duration::from_millis(opts.timeout_ms.unwrap_or(2000));
-    let _concurrency = opts.concurrency.unwrap_or(100) as usize;
-    let ports: Vec<u16> = if opts.full_ports.unwrap_or(false) {
-        FULL_PORTS.to_vec()
-    } else {
-        WHITE_PORTS.to_vec()
+    let cfg = TcpConfig {
+        ports: if opts.full_ports.unwrap_or(false) {
+            FULL_PORTS.to_vec()
+        } else {
+            WHITE_PORTS.to_vec()
+        },
+        concurrency: opts.concurrency.unwrap_or(100) as usize,
+        timeout_ms: opts.timeout_ms.unwrap_or(2000) as u64,
     };
 
-    // Parse subnet — simplified /24 expansion
-    let subnet_base = opts.subnet
-        .strip_suffix("/24")
-        .unwrap_or(&opts.subnet)
-        .trim_end_matches('.');
+    let ips = expand_subnet(&opts.subnet);
+    if ips.is_empty() {
+        return Err("unsupported subnet format (only /24 supported)".into());
+    }
 
+    // SSDP + mDNS 并发
+    let ssdp_handle = tokio::spawn(async move { ssdp::discover_ssdp(5000).await });
+    let mdns_handle = tokio::spawn(async move { mdns::discover_mdns(5000).await });
+
+    // TCP 扫描每个 IP
+    let mut tcp_devices = Vec::new();
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(cfg.concurrency));
     let mut handles = Vec::new();
-    let mut discovered: Vec<Device> = Vec::new();
 
-    for i in 1..=254 {
-        let ip = format!("{}.{}", subnet_base, i);
-        let ports_clone = ports.clone();
-        let timeout_clone = timeout;
-
+    for ip in ips {
+        let permit = semaphore.clone().acquire_owned().await;
+        let cfg = cfg.clone();
         handles.push(tokio::spawn(async move {
-            let mut open_ports = Vec::new();
-            for port in ports_clone {
-                if let Some(p) = probe_port(&ip, port, timeout_clone) {
-                    open_ports.push(p);
-                }
-            }
-            if !open_ports.is_empty() {
-                Some(Device {
-                    ip,
-                    mac: None,
-                    hostname: None,
-                    vendor: None,
-                    ports: open_ports,
-                    sources: vec!["tcp".to_string()],
-                })
-            } else {
+            let _permit = permit;
+            let ports = tcp::probe_ports(&ip, cfg).await;
+            if ports.is_empty() {
                 None
+            } else {
+                // 补充 service 字段
+                let ports = ports.into_iter().map(|mut p| {
+                    let (svc, _) = match_service(p.port, p.banner.as_deref());
+                    p.service = Some(svc.to_string());
+                    p
+                }).collect();
+                Some((ip, ports))
             }
         }));
     }
 
     for h in handles {
-        if let Ok(Some(device)) = h.await {
-            discovered.push(device);
+        if let Ok(Some((ip, ports))) = h.await {
+            tcp_devices.push(Device {
+                ip,
+                mac: None,
+                hostname: None,
+                vendor: None,
+                device_type: None,
+                ports,
+                sources: vec!["tcp".into()],
+            });
         }
     }
 
-    // Run mDNS discovery via Go CLI
-    if let Ok(mdns_devices) = discover_go_devices("mdns") {
-        for mdns_dev in mdns_devices {
-            if !discovered.iter().any(|d| d.ip == mdns_dev.ip) {
-                discovered.push(mdns_dev);
-            }
-        }
+    let mut all_devices = tcp_devices;
+
+    if let Ok(ssdp) = ssdp_handle.await {
+        all_devices.extend(ssdp);
+    }
+    if let Ok(mdns) = mdns_handle.await {
+        all_devices.extend(mdns);
     }
 
-    // Run SSDP discovery via Go CLI
-    if let Ok(ssdp_devices) = discover_go_devices("ssdp") {
-        for ssdp_dev in ssdp_devices {
-            if !discovered.iter().any(|d| d.ip == ssdp_dev.ip) {
-                discovered.push(ssdp_dev);
-            }
-        }
-    }
+    let mut state_devices = state.devices.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+    *state_devices = all_devices.clone();
 
-    let mut state_devices = state.devices.lock().map_err(|e| e.to_string())?;
-    *state_devices = discovered.clone();
-
-    Ok(discovered)
+    Ok(all_devices)
 }
 
 #[tauri::command]
 fn get_devices(state: tauri::State<'_, ScannerState>) -> Result<Vec<Device>, String> {
-    let devices = state.devices.lock().map_err(|e| e.to_string())?;
+    let devices = state.devices.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
     Ok(devices.clone())
 }
 
