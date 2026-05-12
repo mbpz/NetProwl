@@ -172,10 +172,17 @@ func parseMDNSResponse(data []byte, srcIP string) *types.Device {
 		return nil
 	}
 
+	openPorts := []types.Port{}
+	if port > 0 {
+		openPorts = []types.Port{{Port: port, State: types.PortStateOpen}}
+	}
+
 	return &types.Device{
-		IP:        ip,
-		Hostname:  hostname,
-		OpenPorts: []types.Port{},
+		IP:         ip,
+		Hostname:   hostname,
+		OpenPorts:  openPorts,
+		DeviceType: types.DeviceTypeUnknown,
+		OS:         types.OSTypeUnknown,
 	}
 }
 
