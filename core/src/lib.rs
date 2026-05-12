@@ -4,9 +4,6 @@ pub mod types;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod scanner;
 
-#[cfg(target_arch = "wasm32")]
-pub mod scanner;
-
 pub mod util;
 
 #[cfg(feature = "wasm")]

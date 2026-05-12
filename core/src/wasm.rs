@@ -1,7 +1,5 @@
 use wasm_bindgen::prelude::*;
 use crate::util::{ip, oui};
-use crate::scanner::{discover_lan, DiscoveryOptions};
-use crate::types::ScanResult;
 
 #[wasm_bindgen]
 pub fn lookup_vendor(mac: &str) -> Option<String> {
@@ -18,6 +16,13 @@ pub fn expand_subnet(subnet: &str) -> String {
     serde_json::to_string(&ip::expand_subnet(subnet)).unwrap_or_else(|_| "[]".to_string())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::scanner::{discover_lan, DiscoveryOptions};
+
+#[cfg(not(target_arch = "wasm32"))]
+use crate::types::ScanResult;
+
+#[cfg(not(target_arch = "wasm32"))]
 #[wasm_bindgen]
 pub async fn scan_network() -> Result<JsValue, JsValue> {
     let opts = DiscoveryOptions::default();
@@ -29,6 +34,6 @@ pub async fn scan_network() -> Result<JsValue, JsValue> {
 }
 
 #[wasm_bindgen]
-pub fn set_timeout(ms: u32) {
+pub fn set_timeout(_ms: u32) {
     // WASM environments have limited timeout support
 }
