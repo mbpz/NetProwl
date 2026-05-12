@@ -2,7 +2,9 @@
 
 use netprowl_core::{discover_lan, DiscoveryOptions, scanner::get_local_ip};
 
+mod pipeline;
 mod tool_commands;
+pub use pipeline::{run_pipeline, PipelineOptions, PipelineResult};
 pub use tool_commands::{
     run_ffuf, run_feroxbuster, run_masscan, run_nmap, run_nuclei, run_rustscan,
 };
@@ -18,4 +20,9 @@ pub async fn scan_network() -> Result<netprowl_core::ScanResult, String> {
 pub fn get_local_ip() -> Result<String, String> {
     get_local_ip()
         .ok_or_else(|| "Could not determine local IP".to_string())
+}
+
+#[tauri::command]
+async fn run_pipeline(opts: pipeline::PipelineOptions) -> Result<Vec<pipeline::PipelineResult>, String> {
+    pipeline::run_pipeline(opts).await
 }
