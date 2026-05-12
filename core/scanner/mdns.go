@@ -79,13 +79,132 @@ func DiscoverMDNS(ctx context.Context, cfg MDNSConfig) ([]types.Device, error) {
 }
 
 func buildMDNSQuery(serviceType string) []byte {
-	// 简化的 mDNS 查询报文构建
-	// 实际使用 miekg/dns 库会更完整
-	return []byte{}
+	buf := make([]byte, 12)
+	binary.BigEndian.PutUint16(buf[0:2], 0)     // Transaction ID
+	binary.BigEndian.PutUint16(buf[2:4], 0x0100) // Flags: standard query
+	binary.BigEndian.PutUint16(buf[4:6], 1)       // Questions: 1
+	binary.BigEndian.PutUint16(buf[6:8], 0)      // Answers: 0
+	binary.BigEndian.PutUint16(buf[8:10], 0)     // Authority: 0
+	binary.BigEndian.PutUint16(buf[10:12], 0)    // Additional: 0
+
+	// Add question in DNS format
+	for _, part := range strings.Split(serviceType, ".") {
+		if len(part) > 63 {
+			part = part[:63]
+		}
+		buf = append(buf, byte(len(part)))
+		buf = append(buf, part...)
+	}
+	buf = append(buf, 0) // null terminator
+
+	// QTYPE: PTR (12)
+	buf = append(buf, 0, 12)
+	// QCLASS: IN (1), with QU flag (0x8000)
+	buf = append(buf, 0x80, 0x01)
+
+	return buf
 }
 
 func parseMDNSResponse(data []byte, srcIP string) *types.Device {
-	// 简化的解析逻辑
-	// 实际需要解析 mDNS 响应报文
-	return nil
+	if len(data) < 12 {
+		return nil
+	}
+
+	// Skip header
+	offset := 12
+
+	// Skip questions
+	for offset < len(data) {
+		if data[offset] == 0 {
+			offset += 5 // null + QTYPE + QCLASS
+			break
+		}
+		offset += 1 + int(data[offset])
+	}
+
+	var ip, hostname string
+	var port int
+
+	// Parse resource records
+	for offset < len(data) {
+		if offset+12 > len(data) {
+			break
+		}
+
+		// Skip name
+		consumed := skipDNSName(data, offset)
+		offset += consumed
+
+		if offset+10 > len(data) {
+			break
+		}
+
+		qtype := binary.BigEndian.Uint16(data[offset : offset+2])
+		offset += 2
+		// CLASS
+		offset += 2
+		// TTL
+		offset += 4
+		rdlength := int(binary.BigEndian.Uint16(data[offset : offset+2]))
+		offset += 2
+
+		if offset+rdlength > len(data) {
+			break
+		}
+
+		rdata := data[offset : offset+rdlength]
+		offset += rdlength
+
+		switch qtype {
+		case 1: // A record - IPv4
+			if rdlength == 4 {
+				ip = fmt.Sprintf("%d.%d.%d.%d", rdata[0], rdata[1], rdata[2], rdata[3])
+			}
+		case 33: // SRV record
+			if rdlength >= 6 {
+				port = int(binary.BigEndian.Uint16(rdata[4:6]))
+				hostname = readDNSName(rdata, 6)
+			}
+		}
+	}
+
+	if ip == "" {
+		return nil
+	}
+
+	return &types.Device{
+		IP:        ip,
+		Hostname:  hostname,
+		OpenPorts: []types.Port{},
+	}
+}
+
+func skipDNSName(data []byte, offset int) int {
+	// Simplified: skip compressed/uncompressed name
+	// Returns bytes consumed
+	if data[offset]&0xC0 == 0xC0 {
+		return 2 // pointer
+	}
+	start := offset
+	for offset < len(data) && data[offset] != 0 {
+		offset += 1 + int(data[offset])
+	}
+	return offset - start + 1
+}
+
+func readDNSName(data []byte, offset int) string {
+	// Read DNS name starting at offset (after length bytes)
+	var parts []string
+	for offset < len(data) {
+		length := int(data[offset])
+		if length == 0 {
+			break
+		}
+		if length&0xC0 == 0xC0 {
+			break
+		}
+		parts = append(parts, string(data[offset+1:offset+1+length]))
+		offset += 1 + length
+	}
+	return strings.Join(parts, ".")
 }
