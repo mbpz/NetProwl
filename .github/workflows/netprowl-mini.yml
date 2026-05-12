@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: cd netprowl-mini && npm ci
+        run: cd netprowl-mini && npm install
 
       - name: Build WeChat mini program
         run: cd netprowl-mini && npm run build:weapp
