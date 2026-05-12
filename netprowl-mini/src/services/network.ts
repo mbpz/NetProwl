@@ -1,4 +1,5 @@
 // Network service — local IP detection and subnet inference
+import { wasmInferSubnet, wasmExpandSubnet } from '../wasm/netprowl_core'
 
 export interface NetworkInfo {
   localIP: string
@@ -22,26 +23,13 @@ export async function getLocalIPAddress(): Promise<string> {
   return '0.0.0.0'
 }
 
-export function inferSubnet(localIP: string): string {
-  const parts = localIP.split('.')
-  if (parts.length !== 4) return '192.168.1.0/24'
-  return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`
+export async function inferSubnet(localIP: string): Promise<string> {
+  const result = await wasmInferSubnet(localIP)
+  return result ?? '192.168.1.0/24'
 }
 
-export function expandSubnet(subnet: string): string[] {
-  const parts = subnet.split('.')
-  if (parts.length !== 4) return []
-
-  const base = `${parts[0]}.${parts[1]}.${parts[2]}`
-  const ips: string[] = []
-
-  // Skip .0 (network), .1 (gateway), .255 (broadcast)
-  for (let i = 2; i <= 254; i++) {
-    if (i === 1) continue // skip gateway
-    ips.push(`${base}.${i}`)
-  }
-
-  return ips
+export async function expandSubnet(subnet: string): Promise<string[]> {
+  return await wasmExpandSubnet(subnet)
 }
 
 export function guessGatewayIP(localIP: string): string {

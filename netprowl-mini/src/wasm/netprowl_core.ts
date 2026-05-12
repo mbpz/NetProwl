@@ -1,21 +1,14 @@
 /**
  * rs-core WASM loader
  *
- * Build: cd rs-core && wasm-pack build --target web -d ../build
- * Output: build/ (copied to src/wasm_pkg/)
+ * Build: cd core && wasm-pack build --target web --out-dir pkg
+ * Output: core/pkg/ (imported below as relative path)
  */
 import init, {
   lookup_vendor,
   infer_subnet,
   expand_subnet,
-  guess_gateway,
-  is_private_ip,
-  discover_ssdp,
-  discover_mdns,
-  probe_tcp_ports,
-  grab_banner,
-  guess_service,
-} from '../wasm_pkg/rs_core'
+} from '../../core/pkg'
 
 let initialized = false
 
