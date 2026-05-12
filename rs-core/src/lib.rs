@@ -8,6 +8,7 @@ mod mdns;
 mod ssdp;
 
 pub use types::*;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub fn lookup_vendor(mac: &str) -> Option<String> {
@@ -21,7 +22,9 @@ pub fn infer_subnet(local_ip: &str) -> Option<String> {
 
 #[wasm_bindgen]
 pub fn expand_subnet(subnet: &str) -> String {
-    serde_json::to_string(&ip::expand_subnet(subnet)).unwrap_or_else(|_| "[]".into())
+    let ips = ip::expand_subnet(subnet);
+    let inner: Vec<String> = ips.iter().map(|ip| format!("\"{}\"", ip)).collect();
+    format!("[{}]", inner.join(","))
 }
 
 #[wasm_bindgen(start)]
