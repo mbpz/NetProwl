@@ -1,0 +1,10 @@
+{
+  "$schema": "https://v2.tauri.app/schemas/config.schema.json",
+  "productName": "NetProwl",
+  "version": "1.0.0",
+  "identifier": "com.netprowl.app",
+  "build": {
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  }
+}
