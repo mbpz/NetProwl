@@ -1,0 +1,30 @@
+.chat-page {
+  min-height: 100vh;
+  background: #0f0f1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.placeholder-icon {
+  font-size: 80rpx;
+  margin-bottom: 24rpx;
+}
+
+.placeholder-text {
+  color: #fff;
+  font-size: 36rpx;
+  font-weight: 600;
+}
+
+.placeholder-hint {
+  color: #666;
+  font-size: 28rpx;
+  margin-top: 8rpx;
+}
