@@ -3,3 +3,9 @@ pub mod ssdp;
 pub mod tcp;
 pub mod banner;
 pub mod registry;
+
+pub use mdns::DiscoverMDNS;
+pub use ssdp::DiscoverSSDP;
+pub use tcp::{ProbeTCPPorts, ProbeTCPPort, TCPConfig};
+pub use banner::{GrabBanner, BannerConfig};
+pub use registry::{Match, ServiceRule};
