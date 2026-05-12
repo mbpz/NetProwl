@@ -1,0 +1,29 @@
+name: netprowl-mini Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'netprowl-mini/**'
+  pull_request:
+    paths:
+      - 'netprowl-mini/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: node:18-alpine
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: cd netprowl-mini && npm ci
+
+      - name: Build WeChat mini program
+        run: cd netprowl-mini && npm run build:weapp
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netprowl-mini-dist
+          path: netprowl-mini/dist/
