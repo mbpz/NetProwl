@@ -1,0 +1,33 @@
+.topo-container {
+  width: 100%;
+  height: 400px;
+  background: #0f0f1a;
+  border-radius: 12px;
+  position: relative;
+}
+.topo-canvas {
+  width: 100%;
+  height: 360px;
+}
+.topo-legend {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #999;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.legend-dot.router { background: #00d4ff; }
+.legend-dot.device { background: #00c853; }
+.legend-dot.camera { background: #ff6b35; }

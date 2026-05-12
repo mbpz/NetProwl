@@ -1,0 +1,43 @@
+.scan-button-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.scan-btn {
+  width: 200px;
+  height: 200px;
+  border-radius: 100px;
+  background: linear-gradient(135deg, #00d4ff 0%, #0066ff 100%);
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 8px 32px rgba(0, 212, 255, 0.3);
+}
+.scan-btn.scanning {
+  background: linear-gradient(135deg, #666 0%, #444 100%);
+  box-shadow: none;
+}
+.scan-btn.done {
+  background: linear-gradient(135deg, #00c853 0%, #009624 100%);
+  box-shadow: 0 8px 32px rgba(0, 200, 83, 0.3);
+}
+.scan-btn.error {
+  background: linear-gradient(135deg, #ff6b35 0%, #d32f2f 100%);
+}
+.btn-icon {
+  font-size: 48px;
+}
+.btn-label {
+  font-size: 16px;
+}
+.device-count {
+  font-size: 20px;
+  color: #00d4ff;
+  font-weight: 500;
+}
