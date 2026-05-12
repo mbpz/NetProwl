@@ -1,12 +1,18 @@
-use crate::cve::{query, CveResult};
 use crate::types::DeviceType;
-use once_cell::sync::Lazy;
-use rusqlite::Connection;
-use std::sync::Mutex;
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::cve::{query, CveResult};
+#[cfg(not(target_arch = "wasm32"))]
+use rusqlite::Connection;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Mutex;
+#[cfg(not(target_arch = "wasm32"))]
+use once_cell::sync::Lazy;
+
+#[cfg(not(target_arch = "wasm32"))]
 static CVE_CONN: Lazy<Mutex<Option<Connection>>> = Lazy::new(|| Mutex::new(None));
 
-/// Initialize the CVE database connection (call once at startup)
+#[cfg(not(target_arch = "wasm32"))]
 pub fn init_cve_db() -> Result<(), String> {
     let conn = crate::cve::init_db().map_err(|e| format!("Failed to init CVE DB: {}", e))?;
     let mut guard = CVE_CONN.lock().map_err(|e| e.to_string())?;
@@ -14,7 +20,7 @@ pub fn init_cve_db() -> Result<(), String> {
     Ok(())
 }
 
-/// Lookup CVEs for a given software name and version
+#[cfg(not(target_arch = "wasm32"))]
 pub fn lookup_cve(software: &str, version: &str) -> Vec<CveResult> {
     let guard = match CVE_CONN.lock() {
         Ok(g) => g,
@@ -35,7 +41,7 @@ pub struct ServiceRule {
     pub device_type: DeviceType,
 }
 
-static RULES: Lazy<Vec<ServiceRule>> = Lazy::new(|| {
+static RULES: once_cell::sync::Lazy<Vec<ServiceRule>> = once_cell::sync::Lazy::new(|| {
     vec![
         ServiceRule { id: "http", port: 80, banner_contains: None, service: "HTTP", device_type: DeviceType::Unknown },
         ServiceRule { id: "https", port: 443, banner_contains: None, service: "HTTPS", device_type: DeviceType::Unknown },

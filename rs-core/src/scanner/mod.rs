@@ -10,7 +10,10 @@ pub use tcp::probe_tcp_ports_sync;
 pub use banner::grab_banner_sync;
 pub use registry::match_service;
 pub use registry::guess_service;
+
+#[cfg(not(target_arch = "wasm32"))]
 pub use registry::init_cve_db;
+#[cfg(not(target_arch = "wasm32"))]
 pub use registry::lookup_cve;
 
 #[cfg(not(target_arch = "wasm32"))]
