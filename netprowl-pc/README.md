@@ -1,73 +1,66 @@
-# React + TypeScript + Vite
+# NetProwl PC
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Network reconnaissance tool — PC client built with Tauri + React.
 
-Currently, two official plugins are available:
+## macOS Installation
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### Homebrew (recommended)
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+brew install mbpz/tap/netprowl
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+> Installs `NetProwl.app` to `/Applications`. No Gatekeeper popup, no manual signing.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Manual Install
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Download from [GitHub Releases](https://github.com/mbpz/NetProwl/releases):
+
+```bash
+# ARM (Apple Silicon)
+tar -xzf NetProwl-arm64.tar.gz
+sudo mv NetProwl.app /Applications/
+
+# Intel
+tar -xzf NetProwl-x64.tar.gz
+sudo mv NetProwl.app /Applications/
+```
+
+## Build from Source
+
+```bash
+cd netprowl-pc
+npm install
+npm run tauri dev        # dev mode
+npm run tauri build      # production build
+```
+
+### macOS Build Requirements
+
+- Rust (stable)
+- Node.js 20+
+- macOS 11+ (Big Sur or later)
+
+### Signing & Notarization
+
+The CI pipeline automatically:
+1. Ad-hoc signs the `.app` bundle
+2. Clears `com.apple.quarantine` xattr
+
+This allows the app to run on Apple Silicon Macs without Gatekeeper blocking it.
+
+For local signing:
+
+```bash
+./scripts/post-build-macos.sh path/to/NetProwl.app
+```
+
+## Development
+
+```bash
+# Install external tools
+./install.sh
+
+# Run dev server
+npm run tauri dev
 ```
