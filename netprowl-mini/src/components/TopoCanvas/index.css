@@ -1,0 +1,4 @@
+.topo-canvas { width: 100%; height: 70vw; }
+.topo-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vw; }
+.empty-icon { font-size: 80rpx; margin-bottom: 24rpx; }
+.empty-text { color: #888; font-size: 28rpx; }

@@ -1,0 +1,3 @@
+.scan-btn-wrap { padding: 24rpx 32rpx; }
+.scan-btn { width: 100%; height: 96rpx; background: linear-gradient(135deg, #00d4ff, #0077ff); color: #fff; font-size: 32rpx; font-weight: 600; border-radius: 48rpx; border: none; }
+.scan-btn[disabled] { background: #333; color: #888; }
