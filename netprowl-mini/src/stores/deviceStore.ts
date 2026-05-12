@@ -1,16 +1,19 @@
 import { create } from 'zustand'
 import type { Device, Port, ScanSnapshot } from '../types'
+import type { NetworkInfo } from '../services/network'
 
 interface DeviceStore {
   devices: Device[]
   history: ScanSnapshot[]
   scanning: boolean
   lastScanTime: number | null
+  networkInfo: NetworkInfo | null
 
   // Actions
   addDevice: (d: Device) => void
   setDevices: (ds: Device[]) => void
   setScanning: (v: boolean) => void
+  setNetworkInfo: (info: NetworkInfo | null) => void
   updateDevicePorts: (ip: string, ports: Port[]) => void
   loadHistory: () => void
   saveSnapshot: (ipRange: string) => void
@@ -22,6 +25,7 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
   history: [],
   scanning: false,
   lastScanTime: null,
+  networkInfo: null,
 
   addDevice: (d) => set(s => {
     const existingIdx = s.devices.findIndex(x => x.ip === d.ip)
@@ -49,6 +53,8 @@ export const useDeviceStore = create<DeviceStore>((set, get) => ({
   setDevices: (devices) => set({ devices }),
 
   setScanning: (scanning) => set({ scanning }),
+
+  setNetworkInfo: (networkInfo) => set({ networkInfo }),
 
   updateDevicePorts: (ip, ports) => set(s => ({
     devices: s.devices.map(d =>

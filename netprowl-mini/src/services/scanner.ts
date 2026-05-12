@@ -1,26 +1,9 @@
 import { useDeviceStore } from '../stores/deviceStore'
 import { discoverMDNS } from './mdns'
-import { discoverSSDP } from './udp'
+import { discoverSSDP } from './ssdp'
 import { probeTCPPorts } from './tcp'
+import { getNetworkInfo, guessGatewayIP } from './network'
 import type { Device, Port } from '../types'
-
-// Well-known ports for quick scan
-const WHITE_PORTS = [80, 443, 8080, 8443, 554, 5000, 9000, 49152]
-
-// Common gateway IPs
-const GATEWAY_CANDIDATES = ['192.168.1.1', '192.168.0.1', '10.0.0.1', '10.0.1.1']
-
-function guessGateway(): string {
-  try {
-    const info = wx.getNetworkInfoSync()
-    if (info && info.hostname) {
-      // Try to extract gateway from network info if available
-    }
-  } catch {
-    // fallback
-  }
-  return GATEWAY_CANDIDATES[0]
-}
 
 function guessService(port: number): string | null {
   const map: Record<number, string> = {
@@ -59,12 +42,15 @@ export async function runFullScan(): Promise<Device[]> {
   store.setScanning(true)
 
   try {
+    // F1-5: get local network info
+    const netInfo = await getNetworkInfo()
+
     // Phase 1: mDNS discovery
     try {
       const mdnsDevices = await discoverMDNS()
       mdnsDevices.forEach(d => store.addDevice(d))
     } catch {
-      // mDNS may fail on some platforms
+      // mDNS may fail on some platforms (e.g., iOS)
     }
 
     // Phase 2: SSDP discovery
@@ -77,9 +63,9 @@ export async function runFullScan(): Promise<Device[]> {
 
     // Phase 3: TCP scan on discovered devices + gateway
     const discoveredIPs = store.devices.map(d => d.ip)
-    const gateway = guessGateway()
+    const gateway = guessGatewayIP(netInfo.localIP)
 
-    // Include gateway if not already in list
+    // Add gateway if not already discovered
     const targets = discoveredIPs.includes(gateway)
       ? discoveredIPs
       : [...discoveredIPs, gateway]
@@ -99,7 +85,7 @@ export async function runFullScan(): Promise<Device[]> {
     })
 
     // Save snapshot
-    store.saveSnapshot('local')
+    store.saveSnapshot(netInfo.subnet)
 
   } finally {
     store.setScanning(false)

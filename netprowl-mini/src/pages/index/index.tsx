@@ -6,8 +6,6 @@ import TopoCanvas from '../../components/TopoCanvas'
 import DeviceCard from '../../components/DeviceCard'
 import { Device } from '../../types'
 
-const GATEWAY_IP = '192.168.1.1'
-
 export default class Index extends Component {
   state = {
     selectedDevice: null as Device | null,
@@ -26,19 +24,25 @@ export default class Index extends Component {
   }
 
   render() {
-    const { devices, scanning } = useDeviceStore()
+    const { devices, scanning, networkInfo } = useDeviceStore()
     const { selectedDevice } = this.state
+    const gatewayIP = networkInfo?.gatewayIP || '192.168.1.1'
 
     return (
       <View className="container">
         <View className="header">
           <Text className="title">NetProwl</Text>
           <Text className="subtitle">局域网安全扫描</Text>
+          {networkInfo && (
+            <Text className="network-info">
+              {networkInfo.localIP !== '0.0.0.0' ? networkInfo.localIP : '检测中...'} · {networkInfo.subnet}
+            </Text>
+          )}
         </View>
 
         <TopoCanvas
           devices={devices}
-          gatewayIP={GATEWAY_IP}
+          gatewayIP={gatewayIP}
           onDeviceClick={this.handleDeviceClick}
         />
 
