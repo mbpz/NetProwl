@@ -72,3 +72,36 @@ pub struct ScanResult {
     #[serde(rename = "mdnsUnavailable")]
     pub mdns_unavailable: bool,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BannerConfig {
+    #[serde(rename = "timeoutMs")]
+    pub timeout_ms: u64,
+    #[serde(rename = "includeDeepScan")]
+    pub include_deep_scan: bool,
+    #[serde(rename = "includeRtspsdp")]
+    pub include_rtspsdp: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RTSPStreamInfo {
+    pub server: String,
+    #[serde(rename = "streamUrl")]
+    pub stream_url: String,
+    #[serde(rename = "cameraBrand")]
+    pub camera_brand: String,
+    pub auth: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HTTPHeaders {
+    pub server: String,
+    #[serde(rename = "xPoweredBy")]
+    pub x_powered_by: String,
+    #[serde(rename = "xGenerator")]
+    pub x_generator: String,
+    pub title: String,
+    pub cms: String,
+    #[serde(rename = "pathsFound")]
+    pub paths_found: Vec<String>,
+}

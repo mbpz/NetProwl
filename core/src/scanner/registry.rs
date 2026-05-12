@@ -36,3 +36,7 @@ pub fn match_service(port: u16, banner: &str) -> (&'static str, DeviceType) {
     }
     ("unknown", DeviceType::Unknown)
 }
+
+pub fn guess_service(port: u16) -> String {
+    match_service(port, "").0.to_string()
+}
