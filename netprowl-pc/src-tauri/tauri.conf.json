@@ -27,8 +27,7 @@
     "active": true,
     "targets": ["dmg", "app"],
     "macOS": {
-      "minimumSystemVersion": "11.0",
-      "binaryTier": "fallback"
+      "minimumSystemVersion": "11.0"
     }
   }
 }
