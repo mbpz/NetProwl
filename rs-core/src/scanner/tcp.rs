@@ -2,10 +2,6 @@ use crate::types::{Port, PortState};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::time::Duration;
-#[cfg(not(target_arch = "wasm32"))]
-use tokio::net::TcpStream;
-#[cfg(not(target_arch = "wasm32"))]
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const WHITE_PORTS: &[u16] = &[80, 443, 8080, 8443, 554, 5000, 9000, 49152];
 
@@ -26,6 +22,12 @@ impl Default for TCPConfig {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::net::TcpStream;
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn probe_tcp_ports(ip: &str, cfg: TCPConfig) -> Result<Vec<Port>, Box<dyn std::error::Error + Send + Sync>> {
     let timeout = Duration::from_millis(cfg.timeout_ms);
     let ports: Vec<u16> = cfg.ports;
@@ -50,6 +52,7 @@ pub async fn probe_tcp_ports(ip: &str, cfg: TCPConfig) -> Result<Vec<Port>, Box<
     Ok(open_ports)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn probe_port(ip: &str, port: u16, timeout: Duration) -> Port {
     let addr = format!("{}:{}", ip, port);
     match tokio::time::timeout(timeout, TcpStream::connect(&addr)).await {
@@ -71,6 +74,7 @@ async fn probe_port(ip: &str, port: u16, timeout: Duration) -> Port {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn grab_banner(conn: &mut TcpStream, port: u16) -> String {
     match port {
         80 | 8080 | 8443 => {

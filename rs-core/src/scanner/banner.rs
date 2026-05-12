@@ -1,9 +1,11 @@
 use std::io::{Read, Write};
+use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::net::TcpStream;
 #[cfg(not(target_arch = "wasm32"))]
-use tokio::time::{timeout as tokio_timeout, Duration};
+use tokio::time::{timeout as tokio_timeout, Duration as TDuration};
 
 #[derive(Debug, Clone)]
 pub struct BannerConfig {
@@ -22,8 +24,9 @@ impl Default for BannerConfig {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn grab_banner(ip: &str, port: u16, cfg: BannerConfig) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let timeout_dur = Duration::from_millis(cfg.timeout_ms);
+    let timeout_dur = TDuration::from_millis(cfg.timeout_ms);
     let addr = format!("{}:{}", ip, port);
 
     let mut conn = tokio_timeout(timeout_dur, TcpStream::connect(&addr)).await??;
@@ -37,7 +40,8 @@ pub async fn grab_banner(ip: &str, port: u16, cfg: BannerConfig) -> Result<Strin
     }
 }
 
-async fn grab_http_banner(conn: &mut TcpStream, _timeout_dur: Duration, deep_scan: bool) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+#[cfg(not(target_arch = "wasm32"))]
+async fn grab_http_banner(conn: &mut TcpStream, _timeout_dur: TDuration, deep_scan: bool) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let _ = conn.write_all(b"HEAD / HTTP/1.0\r\nHost: localhost\r\n\r\n").await;
     let mut buf = vec![0u8; 4096];
     let n = conn.read(&mut buf).await?;
@@ -48,7 +52,7 @@ async fn grab_http_banner(conn: &mut TcpStream, _timeout_dur: Duration, deep_sca
         let mut found = Vec::new();
         for path in paths {
             let peer = conn.peer_addr()?;
-            match tokio_timeout(Duration::from_millis(1000), TcpStream::connect(&peer)).await {
+            match tokio_timeout(TDuration::from_millis(1000), TcpStream::connect(peer)).await {
                 Ok(Ok(mut c)) => {
                     if c.write_all(format!("GET {} HTTP/1.0\r\nHost: localhost\r\n\r\n", path).as_bytes()).await.is_ok() {
                         let mut rb = [0u8; 256];
@@ -70,19 +74,22 @@ async fn grab_http_banner(conn: &mut TcpStream, _timeout_dur: Duration, deep_sca
     Ok(resp)
 }
 
-async fn grab_ssh_banner(conn: &mut TcpStream, _timeout_dur: Duration) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+#[cfg(not(target_arch = "wasm32"))]
+async fn grab_ssh_banner(conn: &mut TcpStream, _timeout_dur: TDuration) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let mut buf = vec![0u8; 256];
     let n = conn.read(&mut buf).await?;
     Ok(String::from_utf8_lossy(&buf[..n]).trim().to_string())
 }
 
-async fn grab_ftp_banner(conn: &mut TcpStream, _timeout_dur: Duration) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+#[cfg(not(target_arch = "wasm32"))]
+async fn grab_ftp_banner(conn: &mut TcpStream, _timeout_dur: TDuration) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let mut buf = vec![0u8; 256];
     let n = conn.read(&mut buf).await?;
     Ok(String::from_utf8_lossy(&buf[..n]).trim().to_string())
 }
 
-async fn grab_rtsp_banner(conn: &mut TcpStream, _timeout_dur: Duration, get_sdp: bool) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+#[cfg(not(target_arch = "wasm32"))]
+async fn grab_rtsp_banner(conn: &mut TcpStream, _timeout_dur: TDuration, get_sdp: bool) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let _ = conn.write_all(b"OPTIONS rtsp://localhost/ RTSP/1.0\r\nCSeq: 0\r\n\r\n").await;
     let mut buf = vec![0u8; 512];
     let n = conn.read(&mut buf).await?;
@@ -119,7 +126,8 @@ fn parse_rtsp_sdp(sdp: &str) -> String {
     if parts.is_empty() { sdp.to_string() } else { parts.join(" ") }
 }
 
-async fn grab_generic_banner(conn: &mut TcpStream, _timeout_dur: Duration) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+#[cfg(not(target_arch = "wasm32"))]
+async fn grab_generic_banner(conn: &mut TcpStream, _timeout_dur: TDuration) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let mut buf = vec![0u8; 512];
     let n = conn.read(&mut buf).await?;
     Ok(String::from_utf8_lossy(&buf[..n]).trim().to_string())
