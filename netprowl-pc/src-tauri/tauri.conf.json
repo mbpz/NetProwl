@@ -1,0 +1,11 @@
+{
+  "productName": "NetProwl",
+  "version": "1.0.0",
+  "window": {
+    "title": "NetProwl",
+    "width": 1200,
+    "height": 800,
+    "minWidth": 800,
+    "minHeight": 600
+  }
+}
