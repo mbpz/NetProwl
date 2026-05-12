@@ -53,7 +53,7 @@ export function TopoCanvas({ devices, width, height }: TopoCanvasProps) {
       const y = row * cellHeight + cellHeight / 2
 
       // Draw device icon
-      const icon = DEVICE_ICONS[device.deviceType] || DEVICE_ICONS.unknown
+      const icon = DEVICE_ICONS[device.deviceType || 'unknown'] || DEVICE_ICONS.unknown
       ctx.font = '24px sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
