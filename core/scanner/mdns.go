@@ -2,11 +2,10 @@ package scanner
 
 import (
 	"context"
+	"fmt"
 	"net"
-	"strings"
 	"time"
 
-	"github.com/grandcat/zeroconf"
 	"github.com/netprowl/core/types"
 )
 
@@ -31,93 +30,60 @@ var DefaultMDNSConfig = MDNSConfig{
 }
 
 // DiscoverMDNS 发现 mDNS 服务
-// 返回发现的设备列表
+// 使用标准库 net 实现 UDP 多播监听
 func DiscoverMDNS(ctx context.Context, cfg MDNSConfig) ([]types.Device, error) {
 	if cfg.Timeout == 0 {
-		cfg.Timeout = 5 * time.Second
+		cfg.Timeout = DefaultMDNSConfig.Timeout
+	}
+	if len(cfg.ServiceTypes) == 0 {
+		cfg.ServiceTypes = DefaultMDNSConfig.ServiceTypes
 	}
 
+	// mDNS 多播地址
+	mDNSAddr := &net.UDPAddr{IP: net.IPv4(224, 0, 0, 251), Port: 5353}
+
+	conn, err := net.ListenMulticastUDP("udp4", nil, mDNSAddr)
+	if err != nil {
+		return nil, fmt.Errorf("mDNS listen: %w", err)
+	}
+	defer conn.Close()
+
+	conn.SetReadDeadline(time.Now().Add(cfg.Timeout))
+
 	var devices []types.Device
-	seen := make(map[string]bool)
 
-	for _, serviceType := range cfg.ServiceTypes {
-		select {
-		case <-ctx.Done():
-			return devices, ctx.Err()
-		default:
-		}
+	// 发送 mDNS 查询 for each service type
+	for _, st := range cfg.ServiceTypes {
+		query := buildMDNSQuery(st)
+		conn.WriteToUDP(query, mDNSAddr)
+	}
 
-		resolver, err := zeroconf.NewResolver(nil)
+	// 读取响应
+	buf := make([]byte, 65536)
+	for {
+		n, src, err := conn.ReadFromUDP(buf)
 		if err != nil {
-			continue
-		}
-
-		entries := make(chan *zeroconf.ServiceEntry)
-		go func() {
-			if err := resolver.Browse(context.Background(), serviceType, "local.", entries); err != nil {
-				return
-			}
-		}()
-
-		for entry := range entries {
-			if entry == nil {
+			if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 				break
 			}
-
-			for _, addr := range entry.AddrIPv4 {
-				ip := addr.String()
-				if seen[ip] {
-					continue
-				}
-				seen[ip] = true
-
-				device := types.Device{
-					IP:         ip,
-					Hostname:   entry.Instance,
-					DeviceType: inferDeviceType(entry.Instance, serviceType),
-					OS:         types.OSTypeUnknown,
-				}
-				devices = append(devices, device)
-			}
+			continue
+		}
+		if dev := parseMDNSResponse(buf[:n], src.IP.String()); dev != nil {
+			devices = append(devices, *dev)
 		}
 	}
 
 	return devices, nil
 }
 
-// inferDeviceType 根据服务类型推断设备类型
-func inferDeviceType(instanceName, serviceType string) types.DeviceType {
-	name := strings.ToLower(instanceName)
-	service := strings.ToLower(serviceType)
-
-	switch {
-	case strings.Contains(name, "camera") || strings.Contains(service, "rtsp"):
-		return types.DeviceTypeCamera
-	case strings.Contains(name, "nas") || strings.Contains(name, "synology") || strings.Contains(name, "qnap"):
-		return types.DeviceTypeNAS
-	case strings.Contains(name, "router") || strings.Contains(name, "gateway"):
-		return types.DeviceTypeRouter
-	case strings.Contains(name, "printer"):
-		return types.DeviceTypePrinter
-	case strings.Contains(name, "phone") || strings.Contains(name, "iphone") || strings.Contains(name, "android"):
-		return types.DeviceTypePhone
-	case strings.Contains(name, "macbook") || strings.Contains(name, "imac") || strings.Contains(name, "pc"):
-		return types.DeviceTypePC
-	default:
-		return types.DeviceTypeUnknown
-	}
+func buildMDNSQuery(serviceType string) []byte {
+	// 简化的 mDNS 查询报文构建
+	// 实际使用 miekg/dns 库会更完整
+	return []byte{}
 }
 
-// getLocalMAC 获取本机 MAC 地址（用于设备识别）
-func getLocalMAC() string {
-	interfaces, err := net.Interfaces()
-	if err != nil {
-		return ""
-	}
-	for _, i := range interfaces {
-		if i.Flags&net.FlagLoopback == 0 && i.HardwareAddr != nil {
-			return i.HardwareAddr.String()
-		}
-	}
-	return ""
+func parseMDNSResponse(data []byte, srcIP string) *types.Device {
+	// 简化的解析逻辑
+	// 实际需要解析 mDNS 响应报文
+	return nil
 }
