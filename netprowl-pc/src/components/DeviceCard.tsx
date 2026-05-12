@@ -1,7 +1,8 @@
 interface Port {
   port: number
-  service: string
   state: string
+  service?: string
+  banner?: string
 }
 
 interface Device {
@@ -9,9 +10,8 @@ interface Device {
   mac?: string
   hostname?: string
   vendor?: string
-  deviceType: string
-  os: string
-  openPorts: Port[]
+  ports: Port[]
+  sources: string[]
 }
 
 interface DeviceCardProps {
@@ -28,14 +28,12 @@ export function DeviceCard({ device }: DeviceCardProps) {
       <div className="device-body">
         {device.hostname && <div>Hostname: {device.hostname}</div>}
         {device.mac && <div>MAC: {device.mac}</div>}
-        <div>Type: {device.deviceType}</div>
-        <div>OS: {device.os}</div>
-        {device.openPorts.length > 0 && (
+        {device.ports.length > 0 && (
           <div className="ports">
             <span>开放端口: </span>
-            {device.openPorts.map((p) => (
+            {device.ports.map((p) => (
               <span key={p.port} className="port-tag">
-                {p.port}/{p.service}
+                {p.port}/{p.service || 'unknown'}
               </span>
             ))}
           </div>

@@ -11,6 +11,20 @@ import (
 	"github.com/netprowl/core/util"
 )
 
+// Config 扫描配置
+type Config struct {
+	Subnet         string // 目标子网，如 "192.168.1.0/24"
+	TargetIPs      []string // 目标 IP 列表（优先于 Subnet）
+	Concurrency    int      // 并发数，默认 100
+	TimeoutMs      int      // 单端口超时，默认 2000ms
+	WhitePortsOnly bool     // 仅使用白名单端口（小程序用）
+}
+
+// Scanner 扫描器接口
+type Scanner interface {
+	Run(ctx context.Context, cfg Config) (*types.ScanResult, error)
+}
+
 // compositeScanner 组合扫描器，协调所有发现方法
 type compositeScanner struct{}
 

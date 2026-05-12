@@ -2,24 +2,35 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::net::{IpAddr, TcpStream};
+use std::process::Command;
 use std::time::Duration;
 use std::sync::Mutex;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Device {
+    #[serde(rename = "ip")]
     pub ip: String,
+    #[serde(rename = "mac")]
     pub mac: Option<String>,
+    #[serde(rename = "hostname")]
     pub hostname: Option<String>,
+    #[serde(rename = "vendor")]
     pub vendor: Option<String>,
+    #[serde(rename = "openPorts")]
     pub ports: Vec<Port>,
+    #[serde(rename = "sources")]
     pub sources: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Port {
+    #[serde(rename = "port")]
     pub port: u16,
+    #[serde(rename = "state")]
     pub state: String,
+    #[serde(rename = "service")]
     pub service: Option<String>,
+    #[serde(rename = "banner")]
     pub banner: Option<String>,
 }
 
@@ -55,6 +66,38 @@ fn get_service_name(port: u16) -> Option<String> {
         (49152, "Windows"), (554, "RTSP"), (9200, "Elasticsearch"), (27017, "MongoDB"),
     ].iter().cloned().collect();
     map.get(&port).map(|s| s.to_string())
+}
+
+fn run_go_cli(args: &[&str]) -> Result<String, String> {
+    let go_bin = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .map(|mut p| { p.push("../../../core/bin/netprowl"); p })
+        .unwrap_or_else(|| std::path::PathBuf::from("../../../core/bin/netprowl"));
+
+    let output = Command::new(&go_bin)
+        .args(args)
+        .output()
+        .map_err(|e| format!("failed to run go cli: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn discover_go_devices(kind: &str) -> Result<Vec<Device>, String> {
+    let flag = match kind {
+        "mdns" => "--mdns",
+        "ssdp" => "--ssdp",
+        _ => return Err(format!("unknown discovery kind: {}", kind)),
+    };
+
+    let output = run_go_cli(&[flag])?;
+    let devices: Vec<Device> = serde_json::from_str(&output)
+        .map_err(|e| format!("failed to parse {} devices: {}", kind, e))?;
+    Ok(devices)
 }
 
 fn get_banner(ip: &str, port: u16, timeout: Duration) -> Option<String> {
