@@ -137,7 +137,7 @@ fn probe_port(ip: &str, port: u16, timeout: Duration) -> Option<Port> {
 #[tauri::command]
 async fn start_scan(opts: ScanOptions, state: tauri::State<'_, ScannerState>) -> Result<Vec<Device>, String> {
     let timeout = Duration::from_millis(opts.timeout_ms.unwrap_or(2000));
-    let concurrency = opts.concurrency.unwrap_or(100) as usize;
+    let _concurrency = opts.concurrency.unwrap_or(100) as usize;
     let ports: Vec<u16> = if opts.full_ports.unwrap_or(false) {
         FULL_PORTS.to_vec()
     } else {

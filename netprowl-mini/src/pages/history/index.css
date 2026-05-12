@@ -3,9 +3,18 @@
   background: #0f0f1a;
 }
 
+.history-header {
+  padding: 24rpx 32rpx 8rpx;
+}
+
+.history-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #fff;
+}
+
 .history-list {
-  padding: 24rpx 32rpx;
-  height: 100vh;
+  padding: 16rpx 32rpx;
 }
 
 .empty {
@@ -65,6 +74,95 @@
 .item-detail {
   padding: 0 24rpx 24rpx;
   border-top: 1rpx solid #2a2a4a;
+}
+
+.compare-btn {
+  background: rgba(0, 212, 255, 0.1);
+  border: 1rpx solid rgba(0, 212, 255, 0.3);
+  border-radius: 8rpx;
+  padding: 12rpx 16rpx;
+  margin: 12rpx 0 16rpx;
+  text-align: center;
+}
+
+.compare-btn.active {
+  background: rgba(0, 212, 255, 0.2);
+}
+
+.compare-text {
+  color: #00d4ff;
+  font-size: 26rpx;
+}
+
+.diff-section {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12rpx;
+  padding: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.diff-group {
+  margin-bottom: 16rpx;
+}
+
+.diff-group:last-child {
+  margin-bottom: 0;
+}
+
+.diff-label {
+  display: block;
+  font-size: 24rpx;
+  font-weight: 600;
+  margin-bottom: 8rpx;
+}
+
+.diff-label.added { color: #10b981; }
+.diff-label.removed { color: #ef4444; }
+.diff-label.changed { color: #f59e0b; }
+
+.diff-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8rpx 12rpx;
+  border-radius: 6rpx;
+  margin-bottom: 4rpx;
+}
+
+.diff-row.added { background: rgba(16, 185, 129, 0.1); }
+.diff-row.removed { background: rgba(239, 68, 68, 0.1); }
+.diff-row.changed { background: rgba(245, 158, 11, 0.1); }
+
+.diff-ip {
+  color: #fff;
+  font-size: 26rpx;
+}
+
+.diff-info {
+  color: #888;
+  font-size: 24rpx;
+}
+
+.diff-changes {
+  display: flex;
+  gap: 8rpx;
+}
+
+.port-added {
+  color: #10b981;
+  font-size: 24rpx;
+}
+
+.port-removed {
+  color: #ef4444;
+  font-size: 24rpx;
+}
+
+.no-changes {
+  color: #666;
+  font-size: 26rpx;
+  text-align: center;
+  padding: 8rpx 0;
 }
 
 .device-row {
