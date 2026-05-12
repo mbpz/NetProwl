@@ -186,6 +186,24 @@ async fn start_scan(opts: ScanOptions, state: tauri::State<'_, ScannerState>) ->
         }
     }
 
+    // Run mDNS discovery via Go CLI
+    if let Ok(mdns_devices) = discover_go_devices("mdns") {
+        for mdns_dev in mdns_devices {
+            if !discovered.iter().any(|d| d.ip == mdns_dev.ip) {
+                discovered.push(mdns_dev);
+            }
+        }
+    }
+
+    // Run SSDP discovery via Go CLI
+    if let Ok(ssdp_devices) = discover_go_devices("ssdp") {
+        for ssdp_dev in ssdp_devices {
+            if !discovered.iter().any(|d| d.ip == ssdp_dev.ip) {
+                discovered.push(ssdp_dev);
+            }
+        }
+    }
+
     let mut state_devices = state.devices.lock().map_err(|e| e.to_string())?;
     *state_devices = discovered.clone();
 
