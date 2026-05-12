@@ -1,0 +1,18 @@
+[package]
+name = "netprowl-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "netprowl_core"
+crate-type = ["lib", "cdylib"]  # both native lib + WASM
+
+[dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros", "io-util", "net"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures = "0.3"
+anyhow = "1"
+thiserror = "1"
+lazy_static = "1"
+regex = "1"
