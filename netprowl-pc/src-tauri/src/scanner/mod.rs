@@ -7,6 +7,7 @@ pub mod banner;
 pub mod registry;
 pub mod mdns;
 pub mod ssdp;
+pub mod tool_discovery;
 
 use serde::{Deserialize, Serialize};
 

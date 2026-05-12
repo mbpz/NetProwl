@@ -27,6 +27,7 @@ governor = "0.7"
 regex = "1"
 lazy_static = "1"
 base16 = "0.2"
+which = "4"
 
 [profile.release]
 panic = "abort"
