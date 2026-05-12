@@ -1,124 +1,117 @@
 import { Component } from 'react'
-import { View, Text, ScrollView } from '@tarojs/components'
-import { Device } from '../../types'
-import { runScan } from '../../services/scanner'
-import { getLocalIPAddress } from '../../services/network'
+import { View, Text } from '@tarojs/components'
+import { useDeviceStore } from '../../stores/deviceStore'
+import { runFullScan } from '../../services/scanner'
 import TopoCanvas from '../../components/TopoCanvas'
 import DeviceCard from '../../components/DeviceCard'
-import ScanButton from '../../components/ScanButton'
+import { Device } from '../../types'
 
-interface State {
-  devices: Device[]
-  scanning: boolean
-  selectedDevice: Device | null
-  mdnsUnavailable: boolean
-  lastScanTime: number | null
-  summaryText: string
-  localIP: string
-}
-
-export default class Discovery extends Component<State> {
-  state: State = {
-    devices: [],
-    scanning: false,
-    selectedDevice: null,
-    mdnsUnavailable: false,
-    lastScanTime: null,
-    summaryText: '点击下方按钮开始局域网扫描',
-    localIP: ''
+export default class Discovery extends Component {
+  state = {
+    selectedDevice: null as Device | null,
   }
 
-  async componentDidMount() {
-    const ip = await getLocalIPAddress()
-    this.setState({ localIP: ip })
+  handleScan = async () => {
+    await runFullScan()
   }
 
-  async handleScan() {
-    if (this.state.scanning) return
-    this.setState({ scanning: true, summaryText: '扫描中...' })
-
-    try {
-      const result = await runScan()
-      const duration = (result.durationMs / 1000).toFixed(1)
-      this.setState({
-        devices: result.devices,
-        scanning: false,
-        lastScanTime: Date.now(),
-        mdnsUnavailable: result.mdnsUnavailable,
-        summaryText: `发现 ${result.devices.length} 台设备，耗时 ${duration}s`
-      })
-
-      if (result.mdnsUnavailable) {
-        wx.showToast({ title: 'iOS 环境已降级至 TCP 扫描', icon: 'none', duration: 2000 })
-      }
-    } catch (err) {
-      this.setState({ scanning: false, summaryText: '扫描失败，请重试' })
-    }
-  }
-
-  handleDeviceClick(device: Device) {
+  handleDeviceClick = (device: Device) => {
     this.setState({ selectedDevice: device })
   }
 
-  handleDrawerClose() {
+  handleCloseDetail = () => {
     this.setState({ selectedDevice: null })
   }
 
   render() {
-    const { devices, scanning, selectedDevice, summaryText } = this.state
-    const gatewayIP = devices.find((d: Device) => d.deviceType === 'router')?.ip || devices[0]?.ip || ''
+    const { devices, scanning, networkInfo } = useDeviceStore()
+    const { selectedDevice } = this.state
+    const gatewayIP = networkInfo?.gatewayIP || devices.find((d) => d.deviceType === 'router')?.ip || devices[0]?.ip || '192.168.1.1'
 
     return (
-      <View className='discovery-page'>
-        <View className='summary-bar'>
-          <Text className='summary-text'>{summaryText}</Text>
+      <View className="discovery-page">
+        <View className="header">
+          <Text className="title">NetProwl</Text>
+          <Text className="subtitle">局域网安全扫描</Text>
+          {networkInfo && (
+            <Text className="network-info">
+              {networkInfo.localIP !== '0.0.0.0' ? networkInfo.localIP : '检测中...'} · {networkInfo.subnet}
+            </Text>
+          )}
         </View>
 
-        <ScrollView scrollY className='device-scroll'>
-          {devices.length === 0 ? (
-            <View className='empty-state'>
-              <Text className='empty-icon'>🛣</Text>
-              <Text className='empty-text'>未发现设备</Text>
-              <Text className='empty-hint'>确认在同一 WiFi 下</Text>
-            </View>
-          ) : (
-            <View className='device-list'>
-              {devices.map((d: Device) => (
-                <DeviceCard key={d.ip} device={d} onClick={this.handleDeviceClick.bind(this)} />
-              ))}
-            </View>
-          )}
-        </ScrollView>
+        <TopoCanvas
+          devices={devices}
+          gatewayIP={gatewayIP}
+          onDeviceClick={this.handleDeviceClick}
+        />
 
-        <View className='bottom-area'>
-          {devices.length > 0 && gatewayIP && (
-            <View className='topo-wrap'>
-              <TopoCanvas devices={devices} gatewayIP={gatewayIP} onDeviceClick={this.handleDeviceClick.bind(this)} />
-            </View>
-          )}
-          <ScanButton scanning={scanning} onScan={this.handleScan.bind(this)} />
+        <View className="scan-btn-wrap">
+          <View
+            className={`scan-btn ${scanning ? 'scanning' : ''}`}
+            onClick={scanning ? undefined : this.handleScan}
+          >
+            <Text>{scanning ? '⏳ 扫描中...' : '🔍 开始扫描'}</Text>
+          </View>
         </View>
+
+        {devices.length > 0 && (
+          <View className="device-list">
+            <Text className="section-title">设备详情 ({devices.length})</Text>
+            {devices.map(d => (
+              <DeviceCard
+                key={d.id}
+                device={d}
+                onClick={this.handleDeviceClick}
+              />
+            ))}
+          </View>
+        )}
 
         {selectedDevice && (
-          <View className='drawer-overlay' onClick={this.handleDrawerClose.bind(this)}>
-            <View className='drawer-panel' onClick={(e) => e.stopPropagation()}>
-              <View className='drawer-header'>
-                <Text className='drawer-ip'>{selectedDevice.ip}</Text>
-                <Text className='drawer-close' onClick={this.handleDrawerClose.bind(this)}>✕</Text>
+          <View className="device-detail-modal" onClick={this.handleCloseDetail}>
+            <View className="modal-content" onClick={() => {}}>
+              <View className="modal-header">
+                <Text className="modal-title">{selectedDevice.hostname || selectedDevice.ip}</Text>
+                <Text className="modal-close" onClick={this.handleCloseDetail}>✕</Text>
               </View>
-              <View className='drawer-body'>
-                <View className='info-row'>
-                  <Text className='info-label'>厂商</Text>
-                  <Text className='info-value'>{selectedDevice.vendor || '—'}</Text>
+              <View className="modal-body">
+                <View className="info-row">
+                  <Text className="info-label">IP</Text>
+                  <Text className="info-value">{selectedDevice.ip}</Text>
                 </View>
-                <View className='info-row'>
-                  <Text className='info-label'>类型</Text>
-                  <Text className='info-value'>{selectedDevice.deviceType}</Text>
+                {selectedDevice.mac && (
+                  <View className="info-row">
+                    <Text className="info-label">MAC</Text>
+                    <Text className="info-value">{selectedDevice.mac}</Text>
+                  </View>
+                )}
+                {selectedDevice.vendor && (
+                  <View className="info-row">
+                    <Text className="info-label">厂商</Text>
+                    <Text className="info-value">{selectedDevice.vendor}</Text>
+                  </View>
+                )}
+                <View className="info-row">
+                  <Text className="info-label">类型</Text>
+                  <Text className="info-value">{selectedDevice.deviceType}</Text>
                 </View>
-                <View className='info-row'>
-                  <Text className='info-label'>端口</Text>
-                  <Text className='info-value'>{selectedDevice.openPorts?.length || 0}</Text>
+                <View className="info-row">
+                  <Text className="info-label">来源</Text>
+                  <Text className="info-value">{selectedDevice.sources.join(', ')}</Text>
                 </View>
+                {selectedDevice.openPorts.length > 0 && (
+                  <View className="ports-section">
+                    <Text className="ports-title">开放端口 ({selectedDevice.openPorts.length})</Text>
+                    {selectedDevice.openPorts.map(p => (
+                      <View className="port-item" key={p.port}>
+                        <Text className="port-num">{p.port}</Text>
+                        <Text className="port-service">{p.service || '-'}</Text>
+                        <Text className="port-state">{p.state}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             </View>
           </View>
