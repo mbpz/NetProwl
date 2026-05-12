@@ -73,8 +73,8 @@ func DiscoverMDNS(ctx context.Context, cfg MDNSConfig) ([]types.Device, error) {
 
 				device := types.Device{
 					IP:         ip,
-					Hostname:   entry.InstanceName,
-					DeviceType: inferDeviceType(entry.InstanceName, serviceType),
+					Hostname:   entry.Instance,
+					DeviceType: inferDeviceType(entry.Instance, serviceType),
 					OS:         types.OSTypeUnknown,
 				}
 				devices = append(devices, device)
