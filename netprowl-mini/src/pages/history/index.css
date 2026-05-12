@@ -1,0 +1,10 @@
+.history-page { min-height: 100vh; background: #0f0f1a; }
+.list { height: 100vh; padding: 24rpx 32rpx; }
+.empty { display: flex; justify-content: center; padding-top: 120rpx; }
+.empty-text { color: #888; font-size: 28rpx; }
+.snap-item { display: flex; align-items: center; padding: 24rpx 0; border-bottom: 1px solid #1e1e3a; }
+.snap-dot { width: 12rpx; height: 12rpx; border-radius: 50%; background: #00d4ff; margin-right: 24rpx; }
+.snap-info { flex: 1; }
+.snap-time { display: block; color: #fff; font-size: 28rpx; }
+.snap-range { display: block; color: #666; font-size: 24rpx; margin-top: 4rpx; }
+.snap-count { color: #00d4ff; font-size: 26rpx; }
