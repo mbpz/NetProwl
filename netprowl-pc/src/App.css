@@ -1,0 +1,18 @@
+.app { min-height: 100vh; background: #0f0f1a; color: #fff; padding: 32px; font-family: -apple-system, sans-serif; }
+.header { margin-bottom: 32px; }
+.header h1 { font-size: 28px; font-weight: 700; }
+.header p { color: #666; font-size: 14px; margin-top: 4px; }
+.form { display: flex; flex-direction: column; gap: 16px; margin-bottom: 32px; }
+.field label { color: #00d4ff; font-size: 14px; display: block; margin-bottom: 8px; }
+.range { display: flex; gap: 8px; }
+.range input { flex: 1; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 8px; padding: 12px 16px; color: #fff; font-size: 14px; }
+button { height: 48px; background: linear-gradient(135deg, #00d4ff, #0077ff); color: #fff; border: none; border-radius: 24px; font-size: 16px; font-weight: 600; cursor: pointer; }
+button:disabled { background: #333; color: #888; }
+.device-list { display: flex; flex-direction: column; gap: 12px; }
+.device-card { background: #1a1a2e; border-radius: 12px; padding: 16px; }
+.card-ip { font-size: 16px; font-weight: 600; color: #fff; }
+.card-vendor { color: #666; font-size: 12px; margin-top: 4px; }
+.card-ports { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.port-tag { display: flex; align-items: center; gap: 4px; background: #2a2a4a; padding: 4px 10px; border-radius: 6px; }
+.port-num { color: #00d4ff; font-size: 13px; font-weight: 600; }
+.port-svc { color: #888; font-size: 11px; }
