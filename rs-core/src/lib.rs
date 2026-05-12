@@ -12,7 +12,6 @@ pub mod consts;
 
 pub use types::*;
 use wasm_bindgen::prelude::*;
-use serde::Serialize;
 
 #[wasm_bindgen]
 pub fn lookup_vendor(mac: &str) -> Option<String> {
@@ -41,20 +40,39 @@ pub fn is_private_ip(ip: &str) -> bool {
 }
 
 // Scanner exports (sync wrappers around async impls)
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::runtime::Runtime;
+
 #[wasm_bindgen]
 pub fn discover_ssdp(timeout_ms: u64) -> String {
-    let devices = crate::scanner::ssdp::discover_ssdp_sync(timeout_ms);
-    serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string())
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let rt = Runtime::new().unwrap();
+        let devices = rt.block_on(crate::scanner::ssdp::discover_ssdp_sync(timeout_ms));
+        serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string())
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        "[]".to_string()
+    }
 }
 
 #[wasm_bindgen]
 pub fn discover_mdns(service_types: Vec<String>, timeout_ms: u64) -> String {
-    let cfg = crate::scanner::mdns::MDNSConfig {
-        service_types,
-        timeout: std::time::Duration::from_secs(timeout_ms / 1000),
-    };
-    let devices = crate::scanner::mdns::discover_mdns_sync(cfg);
-    serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string())
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let cfg = crate::scanner::mdns::MDNSConfig {
+            service_types,
+            timeout: std::time::Duration::from_secs(timeout_ms / 1000),
+        };
+        let rt = Runtime::new().unwrap();
+        let devices = rt.block_on(crate::scanner::mdns::discover_mdns_sync(cfg));
+        serde_json::to_string(&devices).unwrap_or_else(|_| "[]".to_string())
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        "[]".to_string()
+    }
 }
 
 #[wasm_bindgen]

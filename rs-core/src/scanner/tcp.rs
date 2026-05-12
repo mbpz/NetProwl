@@ -1,7 +1,10 @@
 use crate::types::{Port, PortState};
 use std::collections::HashMap;
+use std::io::{Read, Write};
 use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::net::TcpStream;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 const WHITE_PORTS: &[u16] = &[80, 443, 8080, 8443, 554, 5000, 9000, 49152];
@@ -106,4 +109,38 @@ static SERVICE_MAP: once_cell::sync::Lazy<HashMap<u16, &'static str>> = once_cel
 
 fn guess_service(port: u16) -> String {
     SERVICE_MAP.get(&port).copied().unwrap_or("unknown").to_string()
+}
+
+// Sync version for WASM exports
+pub fn probe_tcp_ports_sync(ip: &str, cfg: TCPConfig) -> Vec<Port> {
+    let timeout = Duration::from_millis(cfg.timeout_ms);
+    let mut open_ports = Vec::new();
+    for port in &cfg.ports {
+        let addr = format!("{}:{}", ip, port);
+        if let Ok(mut conn) = std::net::TcpStream::connect_timeout(&addr.parse().unwrap(), timeout) {
+            conn.set_read_timeout(Some(Duration::from_secs(1))).ok();
+            let banner = grab_banner_sync(&mut conn, *port);
+            open_ports.push(Port {
+                port: *port,
+                service: Some(guess_service(*port)),
+                state: PortState::Open,
+                banner: Some(banner),
+            });
+        }
+    }
+    open_ports
+}
+
+fn grab_banner_sync(conn: &mut std::net::TcpStream, port: u16) -> String {
+    match port {
+        80 | 8080 | 8443 => {
+            let _ = conn.write_all(b"HEAD / HTTP/1.0\r\nHost: localhost\r\n\r\n");
+        }
+        _ => {}
+    }
+    let mut buf = [0u8; 1024];
+    match conn.read(&mut buf) {
+        Ok(n) => String::from_utf8_lossy(&buf[..n]).trim().to_string(),
+        _ => String::new(),
+    }
 }

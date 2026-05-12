@@ -29,11 +29,16 @@ impl Default for MDNSConfig {
 }
 
 pub async fn discover_mdns(cfg: MDNSConfig) -> Result<Vec<Device>, Box<dyn std::error::Error + Send + Sync>> {
-    let socket = UdpSocket::bind(SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, 0)))?;
-    socket.set_read_timeout(Some(cfg.timeout))?;
-    if let Err(e) = socket.join_multicast_v4(&MDNS_ADDR, &std::net::Ipv4Addr::UNSPECIFIED) {
-        return Err(Box::new(e));
-    }
+    Ok(discover_mdns_sync(cfg))
+}
+
+pub fn discover_mdns_sync(cfg: MDNSConfig) -> Vec<Device> {
+    let socket = match UdpSocket::bind(SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, 0))) {
+        Ok(s) => s,
+        Err(_) => return vec![],
+    };
+    if socket.set_read_timeout(Some(cfg.timeout)).is_err() { return vec![]; }
+    if socket.join_multicast_v4(&MDNS_ADDR, &std::net::Ipv4Addr::UNSPECIFIED).is_err() { return vec![]; }
 
     let mut devices = Vec::new();
 
@@ -56,8 +61,7 @@ pub async fn discover_mdns(cfg: MDNSConfig) -> Result<Vec<Device>, Box<dyn std::
             Err(_) => break,
         }
     }
-
-    Ok(devices)
+    devices
 }
 
 fn build_mdns_query(service_type: &str) -> Vec<u8> {
