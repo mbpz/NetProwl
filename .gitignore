@@ -1,6 +1,5 @@
 # Build artifacts
 **/target/
-/netprowl-mini/
 
 # Dependencies
 node_modules/
