@@ -22,5 +22,13 @@
         "fullscreen": false
       }
     ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "binaryTier": "fallback"
+    }
   }
 }

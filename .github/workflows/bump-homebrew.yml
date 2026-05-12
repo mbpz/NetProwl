@@ -1,0 +1,81 @@
+name: Bump Homebrew Cask
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  create-pr:
+    name: Create Homebrew Cask PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare sha256
+        id: patch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+
+          curl -L -o arm64.tar.gz \
+            "https://github.com/mbpz/NetProwl/releases/download/${VERSION}/NetProwl-arm64.tar.gz"
+          SHA256_ARM64=$(shasum -a 256 arm64.tar.gz | awk '{print $1}')
+          rm -f arm64.tar.gz
+
+          curl -L -o x64.tar.gz \
+            "https://github.com/mbpz/NetProwl/releases/download/${VERSION}/NetProwl-x64.tar.gz"
+          SHA256_X64=$(shasum -a 256 x64.tar.gz | awk '{print $1}')
+          rm -f x64.tar.gz
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "sha256_arm64=$SHA256_ARM64" >> $GITHUB_OUTPUT
+          echo "sha256_x64=$SHA256_X64" >> $GITHUB_OUTPUT
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.patch.outputs.version }}"
+          SHA256_ARM64="${{ steps.patch.outputs.sha256_arm64 }}"
+          SHA256_X64="${{ steps.patch.outputs.sha256_x64 }}"
+
+          git clone https://github.com/Homebrew/homebrew-cask /tmp/homebrew-cask
+          cd /tmp/homebrew-cask
+
+          cat > "Casks/n/netprowl.rb" << EOF
+cask "netprowl" do
+  version "${VERSION}"
+  sha256 arm: "${SHA256_ARM64}", intel: "${SHA256_X64}"
+
+  url "https://github.com/mbpz/NetProwl/releases/download/v${VERSION}/NetProwl-arm64.tar.gz",
+      verified: "https://github.com/mbpz/NetProwl/"
+  name "NetProwl"
+  desc "Network reconnaissance tool"
+  homepage "https://github.com/mbpz/NetProwl"
+
+  depends_on macos: ">= :big_sur"
+
+  app "NetProwl.app"
+
+  post_install do
+    system("xattr -rd com.apple.quarantine '#{staged_path}/NetProwl.app'")
+  end
+
+  zap trash: [
+    "~/Library/Application Support/NetProwl",
+    "~/Library/Preferences/com.netprowl.app.plist",
+    "~/Library/Saved Application State/com.netprowl.app.savedState",
+  ]
+end
+EOF
+
+          git checkout -b "netprowl-${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Casks/n/netprowl.rb
+          git commit -m "netprowl ${VERSION}"
+          git push -u origin "netprowl-${VERSION}"
+
+          gh pr create \
+            --title "netprowl ${VERSION}" \
+            --body "Bumps netprowl to ${VERSION}. Built from GitHub Releases." \
+            --repo Homebrew/homebrew-cask
