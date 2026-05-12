@@ -1,0 +1,37 @@
+# Build artifacts
+**/target/
+/netprowl-mini/
+
+# Dependencies
+node_modules/
+
+# Rust
+Cargo.lock
+**/*.rs.bak
+
+# Tauri
+/src-tauri/target/
+/src-tauri/dist/
+/src-tauri/gen/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env.local
+.env.*.local
+
+# wasm-pack output
+/pkg/
+core/target
