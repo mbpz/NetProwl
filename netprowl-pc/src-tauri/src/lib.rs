@@ -44,6 +44,19 @@ impl Default for ScannerState {
 const WHITE_PORTS: &[u16] = &[80, 443, 8080, 8443, 554, 5000, 9000, 49152];
 const FULL_PORTS: &[u16] = &[21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 993, 995, 1433, 1521, 1723, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 9200, 27017];
 
+fn get_service_name(port: u16) -> Option<String> {
+    let map: HashMap<u16, &str> = [
+        (21, "FTP"), (22, "SSH"), (23, "Telnet"), (25, "SMTP"),
+        (53, "DNS"), (80, "HTTP"), (110, "POP3"), (143, "IMAP"),
+        (443, "HTTPS"), (445, "SMB"), (993, "IMAPS"), (995, "POP3S"),
+        (1433, "MSSQL"), (1521, "Oracle"), (1723, "PPTP"), (3306, "MySQL"),
+        (3389, "RDP"), (5432, "PostgreSQL"), (5900, "VNC"), (6379, "Redis"),
+        (8080, "HTTP-Alt"), (8443, "HTTPS-Alt"), (5000, "UPnP"), (9000, "Sonar"),
+        (49152, "Windows"), (554, "RTSP"), (9200, "Elasticsearch"), (27017, "MongoDB"),
+    ].iter().cloned().collect();
+    map.get(&port).map(|s| s.to_string())
+}
+
 fn get_banner(ip: &str, port: u16, timeout: Duration) -> Option<String> {
     if let Ok(addr) = ip.parse::<IpAddr>() {
         if let Ok(mut stream) = TcpStream::connect_timeout(&std::net::SocketAddr::new(addr, port), timeout) {
@@ -71,7 +84,8 @@ fn probe_port(ip: &str, port: u16, timeout: Duration) -> Option<Port> {
         let timeout_adj = Duration::from_millis(timeout.as_millis() as u64);
         if TcpStream::connect_timeout(&std::net::SocketAddr::new(addr, port), timeout_adj).is_ok() {
             let banner = get_banner(ip, port, timeout_adj);
-            return Some(Port { port, state: "open".to_string(), service: None, banner });
+            let service = get_service_name(port);
+            return Some(Port { port, state: "open".to_string(), service, banner });
         }
     }
     None

@@ -2,8 +2,9 @@ import { create } from 'zustand'
 
 interface Port {
   port: number
-  service: string
   state: string
+  service?: string
+  banner?: string
 }
 
 interface Device {
@@ -11,9 +12,8 @@ interface Device {
   mac?: string
   hostname?: string
   vendor?: string
-  deviceType: string
-  os: string
-  openPorts: Port[]
+  ports: Port[]
+  sources: string[]
 }
 
 interface DeviceStore {
