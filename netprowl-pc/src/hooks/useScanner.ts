@@ -18,13 +18,6 @@ interface Device {
   sources: string[]
 }
 
-interface ScanOptions {
-  subnet: string
-  concurrency?: number
-  timeout_ms?: number
-  full_ports?: boolean
-}
-
 export function useScanner() {
   const { setDevices, setScanning, devices } = useDeviceStore()
 
@@ -32,8 +25,11 @@ export function useScanner() {
     setScanning(true)
     try {
       const result = await invoke<Device[]>('start_scan', {
-        opts: { subnet: '192.168.1.0/24', concurrency: 100, timeout_ms: 2000, full_ports: false }
-      } as ScanOptions)
+        subnet: '192.168.1.0/24',
+        concurrency: 100,
+        timeout_ms: 2000,
+        full_ports: false
+      })
       setDevices(result)
     } catch (error) {
       console.error('Scan failed:', error)

@@ -2,7 +2,12 @@ import { useEffect, useRef } from 'react'
 
 interface Device {
   ip: string
-  deviceType: string
+  mac?: string
+  hostname?: string
+  vendor?: string
+  ports: { port: number; state: string; service?: string; banner?: string }[]
+  sources: string[]
+  deviceType?: string
 }
 
 interface TopoCanvasProps {

@@ -4,16 +4,30 @@ import { useDeviceStore } from '../../stores/deviceStore'
 import { runFullScan } from '../../services/scanner'
 import TopoCanvas from '../../components/TopoCanvas'
 import DeviceCard from '../../components/DeviceCard'
+import { Device } from '../../types'
 
 const GATEWAY_IP = '192.168.1.1'
 
 export default class Index extends Component {
+  state = {
+    selectedDevice: null as Device | null,
+  }
+
   handleScan = async () => {
     await runFullScan()
   }
 
+  handleDeviceClick = (device: Device) => {
+    this.setState({ selectedDevice: device })
+  }
+
+  handleCloseDetail = () => {
+    this.setState({ selectedDevice: null })
+  }
+
   render() {
     const { devices, scanning } = useDeviceStore()
+    const { selectedDevice } = this.state
 
     return (
       <View className="container">
@@ -21,6 +35,12 @@ export default class Index extends Component {
           <Text className="title">NetProwl</Text>
           <Text className="subtitle">局域网安全扫描</Text>
         </View>
+
+        <TopoCanvas
+          devices={devices}
+          gatewayIP={GATEWAY_IP}
+          onDeviceClick={this.handleDeviceClick}
+        />
 
         <View className="scan-btn-wrap">
           <View
@@ -31,22 +51,65 @@ export default class Index extends Component {
           </View>
         </View>
 
-        <TopoCanvas
-          devices={devices}
-          gatewayIP={GATEWAY_IP}
-          onDeviceClick={() => {}}
-        />
-
         {devices.length > 0 && (
           <View className="device-list">
-            <Text className="section-title">发现的设备 ({devices.length})</Text>
+            <Text className="section-title">设备详情 ({devices.length})</Text>
             {devices.map(d => (
               <DeviceCard
                 key={d.id}
                 device={d}
-                onClick={() => {}}
+                onClick={this.handleDeviceClick}
               />
             ))}
+          </View>
+        )}
+
+        {selectedDevice && (
+          <View className="device-detail-modal" onClick={this.handleCloseDetail}>
+            <View className="modal-content" onClick={() => {}}>
+              <View className="modal-header">
+                <Text className="modal-title">{selectedDevice.hostname || selectedDevice.ip}</Text>
+                <Text className="modal-close" onClick={this.handleCloseDetail}>✕</Text>
+              </View>
+              <View className="modal-body">
+                <View className="info-row">
+                  <Text className="info-label">IP</Text>
+                  <Text className="info-value">{selectedDevice.ip}</Text>
+                </View>
+                {selectedDevice.mac && (
+                  <View className="info-row">
+                    <Text className="info-label">MAC</Text>
+                    <Text className="info-value">{selectedDevice.mac}</Text>
+                  </View>
+                )}
+                {selectedDevice.vendor && (
+                  <View className="info-row">
+                    <Text className="info-label">厂商</Text>
+                    <Text className="info-value">{selectedDevice.vendor}</Text>
+                  </View>
+                )}
+                <View className="info-row">
+                  <Text className="info-label">类型</Text>
+                  <Text className="info-value">{selectedDevice.deviceType}</Text>
+                </View>
+                <View className="info-row">
+                  <Text className="info-label">来源</Text>
+                  <Text className="info-value">{selectedDevice.sources.join(', ')}</Text>
+                </View>
+                {selectedDevice.openPorts.length > 0 && (
+                  <View className="ports-section">
+                    <Text className="ports-title">开放端口 ({selectedDevice.openPorts.length})</Text>
+                    {selectedDevice.openPorts.map(p => (
+                      <View className="port-item" key={p.port}>
+                        <Text className="port-num">{p.port}</Text>
+                        <Text className="port-service">{p.service || '-'}</Text>
+                        <Text className="port-state">{p.state}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
           </View>
         )}
       </View>

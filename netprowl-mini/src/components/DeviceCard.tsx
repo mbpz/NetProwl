@@ -1,31 +1,43 @@
 import { Component } from 'react'
+import { View, Text } from '@tarojs/components'
+import { Device, DeviceType } from '../types'
+
+const DEVICE_ICONS: Record<DeviceType, string> = {
+  router: '🔰',
+  pc: '💻',
+  camera: '📹',
+  nas: '💾',
+  phone: '📱',
+  printer: '🖨️',
+  unknown: '📟',
+}
 
 interface DeviceCardProps {
-  ip: string
-  mac?: string
-  vendor?: string
-  portCount: number
-  onClick?: () => void
+  device: Device
+  onClick?: (device: Device) => void
 }
 
 export default class DeviceCard extends Component<DeviceCardProps> {
   render() {
-    const { ip, mac, vendor, portCount } = this.props
+    const { device } = this.props
+    const icon = DEVICE_ICONS[device.deviceType] || DEVICE_ICONS.unknown
+    const portCount = device.openPorts?.length || 0
+
     return (
-      <view className="device-card" onClick={this.props.onClick}>
-        <view className="card-icon">
-          <text style={{ fontSize: '32px' }}>📱</text>
-        </view>
-        <view className="card-info">
-          <text className="ip">{ip}</text>
-          {vendor && <text className="vendor">{vendor}</text>}
-          {mac && <text className="mac">{mac}</text>}
-          <text className="ports">{portCount} 个开放端口</text>
-        </view>
-        <view className="card-arrow">
-          <text style={{ color: '#666', fontSize: '20px' }}>›</text>
-        </view>
-      </view>
+      <View className="device-card" onClick={() => this.props.onClick?.(device)}>
+        <View className="card-icon">
+          <Text style={{ fontSize: '28px' }}>{icon}</Text>
+        </View>
+        <View className="card-info">
+          <Text className="ip">{device.ip}</Text>
+          {device.hostname && <Text className="hostname">{device.hostname}</Text>}
+          {device.vendor && <Text className="vendor">{device.vendor}</Text>}
+          <Text className="ports">{portCount} 个开放端口</Text>
+        </View>
+        <View className="card-arrow">
+          <Text style={{ color: '#666', fontSize: '20px' }}>›</Text>
+        </View>
+      </View>
     )
   }
 }

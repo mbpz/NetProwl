@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import { Canvas, View, Text } from '@tarojs/components'
 import { Device, DeviceType } from '../types'
 
 const DEVICE_ICONS: Record<DeviceType, string> = {
@@ -23,7 +24,7 @@ const DEVICE_COLORS: Record<DeviceType, string> = {
 
 interface TopoCanvasProps {
   devices: Device[]
-  localIP?: string
+  gatewayIP?: string
   onDeviceClick?: (device: Device) => void
 }
 
@@ -43,7 +44,7 @@ export default class TopoCanvas extends Component<TopoCanvasProps> {
   }
 
   componentDidUpdate(prevProps: TopoCanvasProps) {
-    if (prevProps.devices !== this.props.devices || prevProps.localIP !== this.props.localIP) {
+    if (prevProps.devices !== this.props.devices || prevProps.gatewayIP !== this.props.gatewayIP) {
       this.draw()
     }
   }
@@ -214,7 +215,7 @@ export default class TopoCanvas extends Component<TopoCanvasProps> {
     ctx.fillText('点击"开始扫描"发现局域网设备', width / 2, height / 2)
   }
 
-  handleCanvasTap(e: any) {
+  handleTap(e: any) {
     if (!this.nodes || this.nodes.length === 0) return
     const { x, y } = e.detail || e
     // Simple tap detection - find closest node within radius
@@ -231,36 +232,36 @@ export default class TopoCanvas extends Component<TopoCanvasProps> {
 
   render() {
     return (
-      <view className="topo-container">
-        <canvas
+      <View className="topo-container">
+        <Canvas
           type="2d"
           className="topo-canvas"
           style={{ width: '100%', height: '280px' }}
-          onTap={this.handleCanvasTap}
+          onTap={this.handleTap}
         />
-        <view className="topo-legend">
-          <view className="legend-item">
-            <view className="legend-dot" style={{ background: '#3b82f6' }} />
-            <text>路由器</text>
-          </view>
-          <view className="legend-item">
-            <view className="legend-dot" style={{ background: '#10b981' }} />
-            <text>PC</text>
-          </view>
-          <view className="legend-item">
-            <view className="legend-dot" style={{ background: '#ef4444' }} />
-            <text>摄像头</text>
-          </view>
-          <view className="legend-item">
-            <view className="legend-dot" style={{ background: '#f59e0b' }} />
-            <text>NAS</text>
-          </view>
-          <view className="legend-item">
-            <view className="legend-dot" style={{ background: '#6b7280' }} />
-            <text>其他</text>
-          </view>
-        </view>
-      </view>
+        <View className="topo-legend">
+          <View className="legend-item">
+            <View className="legend-dot" style={{ background: '#3b82f6' }} />
+            <Text>路由器</Text>
+          </View>
+          <View className="legend-item">
+            <View className="legend-dot" style={{ background: '#10b981' }} />
+            <Text>PC</Text>
+          </View>
+          <View className="legend-item">
+            <View className="legend-dot" style={{ background: '#ef4444' }} />
+            <Text>摄像头</Text>
+          </View>
+          <View className="legend-item">
+            <View className="legend-dot" style={{ background: '#f59e0b' }} />
+            <Text>NAS</Text>
+          </View>
+          <View className="legend-item">
+            <View className="legend-dot" style={{ background: '#6b7280' }} />
+            <Text>其他</Text>
+          </View>
+        </View>
+      </View>
     )
   }
 }
