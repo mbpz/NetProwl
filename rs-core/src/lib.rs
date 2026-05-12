@@ -13,6 +13,9 @@ pub mod consts;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cve;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod security;
+
 pub use types::*;
 use wasm_bindgen::prelude::*;
 
