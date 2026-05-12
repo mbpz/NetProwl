@@ -1,6 +1,6 @@
 //! Tauri commands backed by netprowl-core (Rust).
 
-use netprowl_core::{discover_lan, DiscoveryOptions};
+use netprowl_core::{discover_lan, DiscoveryOptions, scanner::get_local_ip};
 
 #[tauri::command]
 pub async fn scan_network() -> Result<netprowl_core::ScanResult, String> {
@@ -9,11 +9,8 @@ pub async fn scan_network() -> Result<netprowl_core::ScanResult, String> {
         .map_err(|e| e.to_string())
 }
 
-// TODO: netprowl-core does not yet export scanner::get_local_ip.
-// Until it does, fall back to the local-ip-address crate.
 #[tauri::command]
 pub fn get_local_ip() -> Result<String, String> {
-    local_ip_address::local_ip()
-        .map(|ip| ip.to_string())
-        .map_err(|e| e.to_string())
+    get_local_ip()
+        .ok_or_else(|| "Could not determine local IP".to_string())
 }
