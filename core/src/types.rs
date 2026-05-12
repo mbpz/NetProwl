@@ -1,54 +1,74 @@
-use wasm_bindgen::prelude::*;
+use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
-#[derive(serde::Serialize)]
-pub struct Device {
-    pub id: String,
-    pub ip: String,
-    pub mac: Option<String>,
-    pub hostname: Option<String>,
-    pub vendor: Option<String>,
-    pub device_type: String,
-    pub os: String,
-    pub open_ports: Vec<Port>,
-    pub discovered_at: u64,
-    pub sources: Vec<String>,
-}
-
-#[derive(serde::Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Port {
     pub port: u16,
-    pub service: String,
-    pub state: String,
+    pub service: Option<String>,
+    pub state: PortState,
     pub banner: Option<String>,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PortState {
+    Open,
+    Filtered,
+    Closed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Device {
+    pub ip: String,
+    #[serde(rename = "mac")]
+    pub mac: Option<String>,
+    pub hostname: Option<String>,
+    pub vendor: Option<String>,
+    #[serde(rename = "deviceType")]
+    pub device_type: DeviceType,
+    pub os: OSType,
+    #[serde(rename = "openPorts")]
+    pub open_ports: Vec<Port>,
+    pub sources: Vec<DiscoverySource>,
+    #[serde(rename = "discoveredAt")]
+    pub discovered_at: Option<Duration>,
+    pub ttl: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum DeviceType {
+    Router,
+    Pc,
+    Camera,
+    Nas,
+    Phone,
+    Printer,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum OSType {
+    Linux,
+    Windows,
+    Network,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum DiscoverySource {
+    Mdns,
+    Ssdp,
+    Tcp,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanResult {
     pub devices: Vec<Device>,
-    pub duration_ms: u64,
-}
-
-#[derive(serde::Serialize)]
-pub struct BannerConfig {
-    pub timeout_ms: u32,
-    pub include_deep_scan: bool,
-    pub include_rtspsdp: bool,
-}
-
-#[derive(serde::Serialize)]
-pub struct RTSPStreamInfo {
-    pub server: String,
-    pub stream_url: String,
-    pub camera_brand: String,
-    pub auth: String,
-}
-
-#[derive(serde::Serialize)]
-pub struct HTTPHeaders {
-    pub server: String,
-    pub x_powered_by: String,
-    pub x_generator: String,
-    pub title: String,
-    pub cms: String,
-    pub paths_found: Vec<String>,
+    #[serde(rename = "durationMs")]
+    pub duration_ms: i64,
+    #[serde(rename = "mdnsUnavailable")]
+    pub mdns_unavailable: bool,
 }
