@@ -1,0 +1,128 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::net::{IpAddr, TcpStream};
+use std::time::Duration;
+use std::sync::Mutex;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Device {
+    pub ip: String,
+    pub mac: Option<String>,
+    pub hostname: Option<String>,
+    pub vendor: Option<String>,
+    pub ports: Vec<Port>,
+    pub sources: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Port {
+    pub port: u16,
+    pub state: String,
+    pub service: Option<String>,
+    pub banner: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ScanOptions {
+    pub subnet: String,
+    pub concurrency: Option<u32>,
+    pub timeout_ms: Option<u64>,
+    pub full_ports: Option<bool>,
+}
+
+pub struct ScannerState {
+    pub devices: Mutex<Vec<Device>>,
+}
+
+impl Default for ScannerState {
+    fn default() -> Self {
+        Self { devices: Mutex::new(Vec::new()) }
+    }
+}
+
+const WHITE_PORTS: &[u16] = &[80, 443, 8080, 8443, 554, 5000, 9000, 49152];
+const FULL_PORTS: &[u16] = &[21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 993, 995, 1433, 1521, 1723, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 9200, 27017];
+
+fn probe_port(ip: &str, port: u16, timeout: Duration) -> Option<Port> {
+    if let Ok(addr) = ip.parse::<IpAddr>() {
+        let timeout_adj = Duration::from_millis(timeout.as_millis() as u64);
+        if TcpStream::connect_timeout(&std::net::SocketAddr::new(addr, port), timeout_adj).is_ok() {
+            return Some(Port { port, state: "open".to_string(), service: None, banner: None });
+        }
+    }
+    None
+}
+
+#[tauri::command]
+async fn start_scan(opts: ScanOptions, state: tauri::State<'_, ScannerState>) -> Result<Vec<Device>, String> {
+    let timeout = Duration::from_millis(opts.timeout_ms.unwrap_or(2000));
+    let concurrency = opts.concurrency.unwrap_or(100) as usize;
+    let ports: Vec<u16> = if opts.full_ports.unwrap_or(false) {
+        FULL_PORTS.to_vec()
+    } else {
+        WHITE_PORTS.to_vec()
+    };
+
+    // Parse subnet — simplified /24 expansion
+    let subnet_base = opts.subnet
+        .strip_suffix("/24")
+        .unwrap_or(&opts.subnet)
+        .trim_end_matches('.');
+
+    let mut handles = Vec::new();
+    let mut discovered: Vec<Device> = Vec::new();
+
+    for i in 1..=254 {
+        let ip = format!("{}.{}", subnet_base, i);
+        let ports_clone = ports.clone();
+        let timeout_clone = timeout;
+
+        handles.push(tokio::spawn(async move {
+            let mut open_ports = Vec::new();
+            for port in ports_clone {
+                if let Some(p) = probe_port(&ip, port, timeout_clone) {
+                    open_ports.push(p);
+                }
+            }
+            if !open_ports.is_empty() {
+                Some(Device {
+                    ip,
+                    mac: None,
+                    hostname: None,
+                    vendor: None,
+                    ports: open_ports,
+                    sources: vec!["tcp".to_string()],
+                })
+            } else {
+                None
+            }
+        }));
+    }
+
+    for h in handles {
+        if let Ok(Some(device)) = h.await {
+            discovered.push(device);
+        }
+    }
+
+    let mut state_devices = state.devices.lock().map_err(|e| e.to_string())?;
+    *state_devices = discovered.clone();
+
+    Ok(discovered)
+}
+
+#[tauri::command]
+fn get_devices(state: tauri::State<'_, ScannerState>) -> Result<Vec<Device>, String> {
+    let devices = state.devices.lock().map_err(|e| e.to_string())?;
+    Ok(devices.clone())
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .manage(ScannerState::default())
+        .invoke_handler(tauri::generate_handler![start_scan, get_devices])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
