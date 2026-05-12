@@ -7,7 +7,7 @@ Network reconnaissance tool — PC client built with Tauri + React.
 ### Homebrew (recommended)
 
 ```bash
-brew install mbpz/tap/netprowl
+brew install --cask mbpz/tap/netprowl
 ```
 
 > Installs `NetProwl.app` to `/Applications`. No Gatekeeper popup, no manual signing.
