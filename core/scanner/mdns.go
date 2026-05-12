@@ -2,8 +2,10 @@ package scanner
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/netprowl/core/types"
