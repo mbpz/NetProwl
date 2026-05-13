@@ -1,0 +1,8 @@
+[
+  {"id": "CVE-2014-0160", "name": "Heartbleed", "severity": "critical", "description": "OpenSSL heartbeat extension allows memory disclosure"},
+  {"id": "CVE-2014-0224", "name": "CCS Injection", "severity": "critical", "description": "ChangeCipherSpec injection attack"},
+  {"id": "CVE-2016-2107", "name": "Padding Oracle", "severity": "high", "description": "AES CBC padding oracle in OpenSSL"},
+  {"id": "CVE-2016-6323", "name": "DROWN", "severity": "high", "description": "RSA key reuse allows decryption of TLS sessions"},
+  {"id": "CVE-2017-13077", "name": "KRACK-WPA2", "severity": "critical", "description": "Key reinstallation attacks against WPA2"},
+  {"id": "CVE-2017-13078", "name": "KRACK-WPA2", "severity": "critical", "description": "Key reinstallation attacks against WPA2"}
+]
