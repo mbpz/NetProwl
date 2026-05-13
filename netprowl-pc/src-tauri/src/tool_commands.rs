@@ -27,7 +27,7 @@ pub struct NucleiResult {
     pub severity: String,
     pub matched: String,
     pub host: String,
-    pub port: String,
+    pub port: u32,
     pub info: String,
 }
 

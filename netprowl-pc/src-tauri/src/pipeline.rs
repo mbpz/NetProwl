@@ -9,7 +9,7 @@ use crate::tool_commands::{run_ffuf, run_feroxbuster, run_masscan, run_nmap, run
 pub enum PipelineResult {
     Port { ip: String, port: u16, state: String },
     Service { ip: String, port: u16, service: String, banner: String },
-    Vulnerability { template: String, severity: String, matched: String, host: String },
+    Vulnerability { template: String, severity: String, matched: String, host: String, port: u16 },
     Fuzz { url: String, method: String, status: u16 },
 }
 
@@ -75,6 +75,7 @@ pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, 
                         severity: nuclei.severity,
                         matched: nuclei.matched,
                         host: nuclei.host,
+                        port: nuclei.port as u16,
                     });
                 }
             }
