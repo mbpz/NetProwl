@@ -25,10 +25,22 @@ pub struct PipelineOptions {
 pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, String> {
     let mut results = Vec::new();
 
-    // Step 1: Run port scanner
+    // Step 1: Run port scanner in blocking thread
     let scan_results = match opts.scan_tool.as_str() {
-        "masscan" => run_masscan(&opts.target, "1-1000")?,
-        "rustscan" => run_rustscan(&opts.target)?,
+        "masscan" => {
+            let target = opts.target.clone();
+            tokio::task::spawn_blocking(move || run_masscan(&target, "1-1000"))
+                .await
+                .map_err(|e| format!("task join error: {}", e))?
+                .map_err(|e| format!("masscan error: {}", e))?
+        },
+        "rustscan" => {
+            let target = opts.target.clone();
+            tokio::task::spawn_blocking(move || run_rustscan(&target))
+                .await
+                .map_err(|e| format!("task join error: {}", e))?
+                .map_err(|e| format!("rustscan error: {}", e))?
+        },
         _ => return Err(format!("Unknown scan tool: {}", opts.scan_tool)),
     };
 
@@ -46,20 +58,17 @@ pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, 
         for port_result in &results {
             if let PipelineResult::Port { ip, port, .. } = port_result {
                 let target_url = format!("http://{}:{}", ip, port);
-                match run_nuclei(&target_url) {
-                    Ok(nuclei_results) => {
-                        for nuclei in nuclei_results {
-                            results.push(PipelineResult::Vulnerability {
-                                template: nuclei.template,
-                                severity: nuclei.severity,
-                                matched: nuclei.matched,
-                                host: nuclei.host,
-                            });
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("nuclei error for {}: {}", target_url, e);
-                    }
+                let nuclei_results = tokio::task::spawn_blocking(move || run_nuclei(&target_url))
+                    .await
+                    .map_err(|e| format!("task join error: {}", e))?
+                    .unwrap_or_default();
+                for nuclei in nuclei_results {
+                    results.push(PipelineResult::Vulnerability {
+                        template: nuclei.template,
+                        severity: nuclei.severity,
+                        matched: nuclei.matched,
+                        host: nuclei.host,
+                    });
                 }
             }
         }
@@ -69,38 +78,32 @@ pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, 
     if opts.auto_ffuf {
         let ffuf_url = format!("http://{}/FUZZ", opts.target);
         let wordlist = "/usr/share/wordlists/dirb/common.txt";
-        match run_ffuf(&ffuf_url, wordlist) {
-            Ok(ffuf_results) => {
-                for fuzz in ffuf_results {
-                    results.push(PipelineResult::Fuzz {
-                        url: fuzz.url,
-                        method: fuzz.method,
-                        status: fuzz.status,
-                    });
-                }
-            }
-            Err(e) => {
-                eprintln!("ffuf error: {}", e);
-            }
+        let ffuf_results = tokio::task::spawn_blocking(move || run_ffuf(&ffuf_url, wordlist))
+            .await
+            .map_err(|e| format!("task join error: {}", e))?
+            .unwrap_or_default();
+        for fuzz in ffuf_results {
+            results.push(PipelineResult::Fuzz {
+                url: fuzz.url,
+                method: fuzz.method,
+                status: fuzz.status,
+            });
         }
     }
 
     // Step 5: If auto_feroxbuster, run feroxbuster
     if opts.auto_feroxbuster {
         let ferox_url = format!("http://{}", opts.target);
-        match run_feroxbuster(&ferox_url) {
-            Ok(ferox_results) => {
-                for fuzz in ferox_results {
-                    results.push(PipelineResult::Fuzz {
-                        url: fuzz.url,
-                        method: fuzz.method,
-                        status: fuzz.status,
-                    });
-                }
-            }
-            Err(e) => {
-                eprintln!("feroxbuster error: {}", e);
-            }
+        let feroxbuster_results = tokio::task::spawn_blocking(move || run_feroxbuster(&ferox_url))
+            .await
+            .map_err(|e| format!("task join error: {}", e))?
+            .unwrap_or_default();
+        for fuzz in feroxbuster_results {
+            results.push(PipelineResult::Fuzz {
+                url: fuzz.url,
+                method: fuzz.method,
+                status: fuzz.status,
+            });
         }
     }
 
