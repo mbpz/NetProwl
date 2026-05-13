@@ -1,9 +1,22 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 echo "[*] NetProwl Tool Installer"
 OS="$(uname -s)"
 if [ "$OS" != "Linux" ] && [ "$OS" != "Darwin" ]; then echo "[-] Unsupported OS: $OS"; exit 1; fi
-install_tool() { local cmd=$1; local install_cmd=$2; if which "$cmd" > /dev/null 2>&1; then echo "[+] $cmd: $(which $cmd)"; else echo "[*] Installing $cmd..."; eval "$install_cmd" || echo "[-] Failed: $cmd"; fi; }
+install_tool() {
+    local cmd=$1
+    local install_cmd=$2
+    if which "$cmd" > /dev/null 2>&1; then
+        echo "[+] $cmd: $(which $cmd)"
+    else
+        echo "[*] Installing $cmd..."
+        if eval "$install_cmd" 2>&1; then
+            echo "[+] $cmd installed successfully"
+        else
+            echo "[-] Failed to install $cmd - is it in your PATH?"
+        fi
+    fi
+}
 if [ "$OS" = "Linux" ]; then
     sudo apt update
     install_tool masscan "sudo apt install masscan -y"
