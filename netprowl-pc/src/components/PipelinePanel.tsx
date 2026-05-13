@@ -14,7 +14,7 @@ export function PipelinePanel() {
   return (
     <div className="flex gap-4 items-center">
       <select value={selectedTool} onChange={e => setSelectedTool(e.target.value as any)} className="border rounded px-2 py-1">
-        <option value="masscan">masscan</option><option value="rustscan">rustscan</option>
+        <option value="masscan">masscan (fast)</option><option value="rustscan">rustscan (fast)</option><option value="nmap">nmap (banner)</option>
       </select>
       <label className="flex items-center gap-1"><input type="checkbox" checked={autoNuclei} onChange={e => setAutoNuclei(e.target.checked)} /> nuclei</label>
       <button onClick={start} disabled={phase !== 'idle'} className="bg-blue-600 text-white px-4 py-1 rounded disabled:opacity-50">

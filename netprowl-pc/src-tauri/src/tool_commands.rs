@@ -118,7 +118,7 @@ pub fn run_nuclei(target: &str) -> Result<Vec<NucleiResult>, String> {
 /// Run ffuf and parse JSON output lines
 pub fn run_ffuf(url: &str, wordlist: &str) -> Result<Vec<FuzzResult>, String> {
     let output = Command::new("ffuf")
-        .args(["-u", url, "-w", wordlist, "-json"])
+        .args(["-u", url, "-w", wordlist, "-of", "json", "-o", "-"])
         .output()
         .map_err(|e| format!("Failed to execute ffuf: {}", e))?;
 
