@@ -238,6 +238,14 @@ async fn export_report(scan_id: i64, format: String, state: tauri::State<'_, Sca
 }
 
 #[tauri::command]
+async fn export_session_json(session_id: i64, state: tauri::State<'_, ScannerState>) -> Result<String, String> {
+    with_history_db(&state, |db| {
+        let detail = db.get_session_detail(session_id)?;
+        serde_json::to_string_pretty(&detail).map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
 fn tls_audit(host: String, port: u16) -> Result<tls::TLSAuditResult, String> {
     let cert = tls::fetch_cert_info(&host, port)
         .map_err(|e| e.to_string())?;
@@ -278,6 +286,7 @@ pub fn run() {
             get_scan_devices,
             delete_scan,
             export_report,
+            export_session_json,
             tls_audit,
             start_scan_session,
             end_scan_session,
