@@ -67,12 +67,13 @@ jobs:
       - name: Install dependencies
         run: |
           cd netprowl-pc
-          npm install || npm install --legacy-peer-deps
+          npm cache clean --force 2>/dev/null || true
+          npm install --ignore-scripts --prefer-offline --no-audit --no-fund
 
       - name: Build Tauri app
         run: |
           cd netprowl-pc
-          ./node_modules/.bin/tauri build --target ${{ matrix.target }}
+          npx --yes @tauri-apps/cli@2 build --target ${{ matrix.target }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
