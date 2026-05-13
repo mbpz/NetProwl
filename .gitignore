@@ -34,3 +34,4 @@ npm-debug.log*
 # wasm-pack output
 /pkg/
 core/target
+netprowl-pc/src-tauri/target
