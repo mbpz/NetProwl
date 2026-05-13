@@ -68,6 +68,7 @@ pub fn run_masscan(target: &str, ports: &str) -> Result<Vec<MasscanResult>, Stri
                             ip: ip.to_string(),
                             port,
                             state: "open".to_string(),
+                            service: String::new(),
                         });
                     }
                 }
@@ -80,20 +81,23 @@ pub fn run_masscan(target: &str, ports: &str) -> Result<Vec<MasscanResult>, Stri
 
 /// Run nmap with grepable output and parse results
 pub fn run_nmap(target: &str, ports: &str) -> Result<Vec<NmapResult>, String> {
-    let out_file = format!(
-        "{}_nmap_out",
-        target.replace('.', "_").replace('/', "_")
+    let out_file = std::env::temp_dir().join(
+        format!("netprowl_nmap_{}", target.replace('.', "_").replace('/', "_"))
     );
+    let out_str = out_file.to_string_lossy().to_string();
     let output = Command::new("nmap")
-        .args(["-sT", "-sV", "-p", ports, "-oA", &out_file, target])
+        .args(["-sT", "-sV", "-p", ports, "-oA", &out_str, target])
         .output()
         .map_err(|e| format!("nmap failed: {}", e))?;
 
     if !output.status.success() {
+        let _ = std::fs::remove_file(out_file.with_extension("gnmap"));
+        let _ = std::fs::remove_file(out_file.with_extension("nmap"));
+        let _ = std::fs::remove_file(out_file.with_extension("xml"));
         return Err(String::from_utf8_lossy(&output.stderr).into());
     }
 
-    let gnmap_path = format!("{}.gnmap", out_file);
+    let gnmap_path = out_file.with_extension("gnmap");
     let content = std::fs::read_to_string(&gnmap_path)
         .map_err(|e| format!("failed to read nmap output: {}", e))?;
 
@@ -130,8 +134,8 @@ pub fn run_nmap(target: &str, ports: &str) -> Result<Vec<NmapResult>, String> {
 
     // Cleanup temp files
     let _ = std::fs::remove_file(&gnmap_path);
-    let _ = std::fs::remove_file(format!("{}.nmap", out_file));
-    let _ = std::fs::remove_file(format!("{}.xml", out_file));
+    let _ = std::fs::remove_file(out_file.with_extension("nmap"));
+    let _ = std::fs::remove_file(out_file.with_extension("xml"));
 
     Ok(results)
 }
@@ -139,7 +143,7 @@ pub fn run_nmap(target: &str, ports: &str) -> Result<Vec<NmapResult>, String> {
 /// Run nuclei and parse JSON output lines
 pub fn run_nuclei(target: &str) -> Result<Vec<NucleiResult>, String> {
     let output = Command::new("nuclei")
-        .args(["-u", target, "-json", "-silent"])
+        .args(["-u", target, "-json", "-silent", "-timeout", "10", "-rate-limit", "100"])
         .output()
         .map_err(|e| format!("Failed to execute nuclei: {}", e))?;
 
@@ -185,7 +189,7 @@ pub fn run_ffuf(url: &str, wordlist: &str) -> Result<Vec<FuzzResult>, String> {
 /// Run feroxbuster and parse JSON output lines
 pub fn run_feroxbuster(url: &str) -> Result<Vec<FuzzResult>, String> {
     let output = Command::new("feroxbuster")
-        .args(["-u", url, "--json"])
+        .args(["-u", url, "--json", "--timeout", "10", "--rate-limit", "100"])
         .output()
         .map_err(|e| format!("Failed to execute feroxbuster: {}", e))?;
 
@@ -229,6 +233,7 @@ pub fn run_rustscan(target: &str) -> Result<Vec<MasscanResult>, String> {
                     ip: ip.to_string(),
                     port: port as u16,
                     state: "open".to_string(),
+                    service: String::new(),
                 });
             }
         }
