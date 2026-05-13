@@ -62,10 +62,10 @@ pub fn parse_banner(banner: &str) -> BannerAnalysis {
 
 /// Parse SSH banner: "SSH-2.0-OpenSSH_7.4p1 Debian-10+deb9u7"
 fn parse_ssh_banner(banner: &str) -> BannerAnalysis {
-    let mut software = Some("OpenSSH".to_string());
+    let software = Some("OpenSSH".to_string());
     let mut version = None;
     let mut os = None;
-    let mut confidence = 0.9;
+    let confidence = 0.9;
 
     // Extract version
     if let Some(version_match) = Regex::new(r"OpenSSH[_-]?(\d+\.\d+(?:\.\d+)?)").ok().and_then(|r| r.find(banner)) {
@@ -106,7 +106,7 @@ fn parse_ssh_banner(banner: &str) -> BannerAnalysis {
 fn parse_http_banner(banner: &str) -> BannerAnalysis {
     let mut software = None;
     let mut version = None;
-    let mut confidence = 0.7;
+    let confidence = 0.7;
 
     // Try to extract server type from Server header
     if let Some(server_match) = Regex::new(r"Server: ([^\r\n]+)").ok().and_then(|r| r.find(banner)) {
@@ -156,7 +156,7 @@ fn parse_http_banner(banner: &str) -> BannerAnalysis {
 fn parse_ftp_banner(banner: &str) -> BannerAnalysis {
     let mut software = None;
     let mut version = None;
-    let mut confidence = 0.8;
+    let confidence = 0.8;
 
     if banner.contains("220-") {
         // Common FTP servers
@@ -191,7 +191,7 @@ fn parse_ftp_banner(banner: &str) -> BannerAnalysis {
 fn parse_smtp_banner(banner: &str) -> BannerAnalysis {
     let mut software = None;
     let mut version = None;
-    let mut confidence = 0.8;
+    let confidence = 0.8;
 
     if banner.to_lowercase().contains("postfix") {
         software = Some("Postfix".to_string());
@@ -221,7 +221,7 @@ fn parse_smtp_banner(banner: &str) -> BannerAnalysis {
 fn parse_mysql_banner(banner: &str) -> BannerAnalysis {
     let mut software = Some("MySQL".to_string());
     let mut version = None;
-    let mut confidence = 0.9;
+    let confidence = 0.9;
 
     if banner.to_lowercase().contains("mariadb") {
         software = Some("MariaDB".to_string());
@@ -252,7 +252,7 @@ fn parse_mysql_banner(banner: &str) -> BannerAnalysis {
 
 /// Parse Redis banner
 fn parse_redis_banner(banner: &str) -> BannerAnalysis {
-    let mut software = Some("Redis".to_string());
+    let software = Some("Redis".to_string());
     let mut version = None;
     let mut confidence = 0.95;
 
@@ -278,9 +278,9 @@ fn parse_redis_banner(banner: &str) -> BannerAnalysis {
 
 /// Parse MongoDB banner
 fn parse_mongodb_banner(banner: &str) -> BannerAnalysis {
-    let mut software = Some("MongoDB".to_string());
+    let software = Some("MongoDB".to_string());
     let mut version = None;
-    let mut confidence = 0.9;
+    let confidence = 0.9;
     let banner_lower = banner.to_lowercase();
 
     if let Some(ver_match) = Regex::new(r"mongodb\s+(?:server\s+)?(\d+\.\d+(?:\.\d+)*)").ok().and_then(|r| r.find(&banner_lower)) {
@@ -298,9 +298,9 @@ fn parse_mongodb_banner(banner: &str) -> BannerAnalysis {
 
 /// Parse Elasticsearch banner
 fn parse_elasticsearch_banner(banner: &str) -> BannerAnalysis {
-    let mut software = Some("Elasticsearch".to_string());
+    let software = Some("Elasticsearch".to_string());
     let mut version = None;
-    let mut confidence = 0.9;
+    let confidence = 0.9;
     let banner_lower = banner.to_lowercase();
 
     if let Some(ver_match) = Regex::new(r"elasticsearch\s+(\d+\.\d+(?:\.\d+)*)").ok().and_then(|r| r.find(&banner_lower)) {

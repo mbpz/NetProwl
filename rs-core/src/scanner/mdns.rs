@@ -102,7 +102,6 @@ fn parse_mdns_response(data: &[u8], _src_ip: String) -> Option<Device> {
 
     while offset + 12 <= data.len() {
         if data[offset] & 0xC0 == 0xC0 {
-            offset += 2;
             break;
         }
 

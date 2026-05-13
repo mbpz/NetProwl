@@ -36,16 +36,6 @@ impl SecurityHeader {
     }
 }
 
-/// All security headers to check
-const SECURITY_HEADERS: [SecurityHeader; 6] = [
-    SecurityHeader::StrictTransportSecurity,
-    SecurityHeader::ContentSecurityPolicy,
-    SecurityHeader::XFrameOptions,
-    SecurityHeader::XContentTypeOptions,
-    SecurityHeader::ReferrerPolicy,
-    SecurityHeader::PermissionsPolicy,
-];
-
 /// Fetch URL and analyze HTTP security headers
 pub fn audit_http_security(url: &str) -> Result<HttpSecurityReport, String> {
     // Fetch the URL

@@ -44,7 +44,6 @@ pub fn diagnose_network(
 ) -> DiagnosisReport {
     let mut critical_issues = Vec::new();
     let mut medium_issues = Vec::new();
-    let mut recommendations = Vec::new();
 
     // Categorize findings by severity
     for finding in &findings {
@@ -81,7 +80,7 @@ pub fn diagnose_network(
     let summary = generate_summary(&devices, &critical_issues, &medium_issues);
 
     // Generate recommendations
-    recommendations = generate_recommendations(&critical_issues, &medium_issues, &devices);
+    let recommendations = generate_recommendations(&critical_issues, &medium_issues, &devices);
 
     DiagnosisReport {
         summary,
@@ -113,14 +112,13 @@ fn generate_summary(
         let mut router_count = 0;
         let mut camera_count = 0;
         let mut server_count = 0;
-        let mut other_count = 0;
 
         for device in devices {
             match device.device_type.to_lowercase().as_str() {
                 "router" => router_count += 1,
                 "camera" => camera_count += 1,
                 "server" | "pc" => server_count += 1,
-                _ => other_count += 1,
+                _ => {},
             }
         }
 

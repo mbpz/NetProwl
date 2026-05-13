@@ -44,7 +44,7 @@ pub enum RiskLevel {
 
 /// EOS (End of Support) database entry
 #[derive(Debug, Clone)]
-struct EosEntry {
+pub(crate) struct EosEntry {
     brand: &'static str,
     model_pattern: &'static str,
     device_type: DeviceCategory,

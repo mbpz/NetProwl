@@ -95,25 +95,6 @@ const SENSITIVE_PATHS: &[&str] = &[
     "/dump.sql",
 ];
 
-/// API key patterns
-const API_KEY_PATTERNS: &[&str] = &[
-    r"sk_[a-zA-Z0-9]{20,}",
-    r"ak_[a-zA-Z0-9]{20,}",
-    r#"api[_-]?key['"]?\s*[:=]\s*['"]?[a-zA-Z0-9_-]{20,}"#,
-    r#"token['"]?\s*[:=]\s*['"]?[a-zA-Z0-9_-]{20,}"#,
-    r"bearer\s+[a-zA-Z0-9_-]{20,}",
-    r"Authorization:\s*Bearer\s+[a-zA-Z0-9_-]{20,}",
-];
-
-/// Internal IP patterns
-const INTERNAL_IP_PATTERNS: &[&str] = &[
-    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}",
-    r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}",
-    r"192\.168\.\d{1,3}\.\d{1,3}",
-    r"127\.0\.0\.1",
-    r"localhost",
-];
-
 /// Test URL for XSS reflection
 pub fn test_xss_reflection(url: &str) -> Result<Vec<WebVuln>, String> {
     let test_url = format!("{}?q={}", url, urlencoding::encode(XSS_TEST_STRING));

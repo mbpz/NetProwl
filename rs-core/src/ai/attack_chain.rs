@@ -196,9 +196,8 @@ fn calculate_combined_risk(findings: &[super::super::security::report::SecurityR
 }
 
 /// Generate fix priority - break attack chain at most critical points
-fn generate_fix_priority(findings: &[super::super::security::report::SecurityRisk], nodes: &[AttackNode]) -> Vec<FixSuggestion> {
+fn generate_fix_priority(findings: &[super::super::security::report::SecurityRisk], _nodes: &[AttackNode]) -> Vec<FixSuggestion> {
     let mut suggestions = Vec::new();
-    let mut priority = 1u32;
 
     // First, prioritize findings that start attack chains
     for finding in findings {
@@ -212,7 +211,6 @@ fn generate_fix_priority(findings: &[super::super::security::report::SecurityRis
                     action: format!("立即修复: {}", finding.title),
                     effort: "高".to_string(),
                 });
-                priority += 1;
                 break;
             }
         }
@@ -233,7 +231,6 @@ fn generate_fix_priority(findings: &[super::super::security::report::SecurityRis
                     action: format!("修复: {}", finding.title),
                     effort: "中".to_string(),
                 });
-                priority += 1;
             }
             _ => {}
         }
