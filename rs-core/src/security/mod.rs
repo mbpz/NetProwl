@@ -57,7 +57,9 @@ pub use tls_audit::{
 
 pub use unauthorized::{
     UnauthorizedEndpoint,
+    UnauthResult,
     RiskLevel as UnauthRiskLevel,
+    check_unauthorized,
     test_redis_unauth,
     test_elasticsearch_unauth,
     test_mongodb_unauth,
@@ -65,6 +67,7 @@ pub use unauthorized::{
     test_docker_api_unauth,
     test_kubernetes_api_unauth,
     test_rtsp_camera_unauth,
+    test_kafka_unauth,
     test_unauthorized_access,
     common_unauth_ports,
 };
