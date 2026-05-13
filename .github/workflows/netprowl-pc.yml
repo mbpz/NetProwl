@@ -38,7 +38,10 @@ jobs:
           npm install --registry=https://registry.npmjs.org
 
       - name: Build frontend
-        run: cd netprowl-pc && npm run build
+        run: |
+          cd netprowl-pc
+          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+          npm run build
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
@@ -74,7 +77,8 @@ jobs:
       - name: Install dependencies
         run: |
           cd netprowl-pc
-          bun install
+          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+          bun install --registry=https://registry.npmjs.org
 
       - name: Build Tauri app
         run: |
