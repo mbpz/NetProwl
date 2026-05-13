@@ -33,6 +33,7 @@ jobs:
       - name: Install dependencies
         run: |
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+          rm -f ~/.npmrc
           npm install -g npm@9
           npm config delete proxy
           npm config delete https-proxy
@@ -75,8 +76,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd netprowl-pc
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+          rm -f ~/.npmrc ~/.bunrc
+          cd netprowl-pc
           bun install --registry=https://registry.npmjs.org
 
       - name: Build Tauri app
