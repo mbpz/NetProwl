@@ -1,4 +1,4 @@
-use rustls::{ClientConfig, ClientConnection, StreamOwned};
+use rustls::{ClientConfig, ClientConnection, StreamOwned, ProtocolVersion};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
@@ -7,11 +7,11 @@ use crate::tls::TLSConfigInfo;
 
 /// Check which TLS protocol versions and cipher suites are supported by a server.
 pub fn check_tls_config(host: &str, port: u16) -> Result<TLSConfigInfo, String> {
-    let versions: [&(dyn rustls::SupportedProtocolVersion + Sync); 4] = [
-        &rustls::version::TLS13,
-        &rustls::version::TLS12,
-        &rustls::version::TLS11,
-        &rustls::version::TLS10,
+    let versions: [ProtocolVersion; 4] = [
+        ProtocolVersion::TLSv13,
+        ProtocolVersion::TLSv12,
+        ProtocolVersion::TLSv11,
+        ProtocolVersion::TLSv10,
     ];
 
     let mut info = TLSConfigInfo {
@@ -56,20 +56,20 @@ pub fn check_tls_config(host: &str, port: u16) -> Result<TLSConfigInfo, String> 
         // Check which version was negotiated
         let negotiated = stream.conn.protocol_version();
 
-        if negotiated == Some(rustls::version::TLS13) {
+        if negotiated == Some(ProtocolVersion::TLSv13) {
             info.supports_tls13 = true;
-        } else if negotiated == Some(rustls::version::TLS12) {
+        } else if negotiated == Some(ProtocolVersion::TLSv12) {
             info.supports_tls12 = true;
-        } else if negotiated == Some(rustls::version::TLS11) {
+        } else if negotiated == Some(ProtocolVersion::TLSv11) {
             info.supports_tls11 = true;
-        } else if negotiated == Some(rustls::version::TLS10) {
+        } else if negotiated == Some(ProtocolVersion::TLSv10) {
             info.supports_tls10 = true;
         }
     }
 
     // If TLS 1.2 is supported, enumerate cipher suites by negotiating and reading back
     if info.supports_tls12 {
-        let config = match build_config_for_version(&rustls::version::TLS12) {
+        let config = match build_config_for_version(ProtocolVersion::TLSv12) {
             Some(cfg) => cfg,
             None => return Ok(info),
         };
@@ -105,16 +105,14 @@ pub fn check_tls_config(host: &str, port: u16) -> Result<TLSConfigInfo, String> 
     Ok(info)
 }
 
-fn build_config_for_version(
-    version: &(dyn rustls::SupportedProtocolVersion + Sync),
-) -> Option<ClientConfig> {
+fn build_config_for_version(version: ProtocolVersion) -> Option<ClientConfig> {
     let mut config = ClientConfig::builder()
         .dangerous_disable_certificate_verification()
         .ok()?;
 
     config.alpn_protocols.clear();
-    config.max_protocol_version = Some(version.version);
-    config.min_protocol_version = Some(version.version);
+    config.max_protocol_version = Some(version);
+    config.min_protocol_version = Some(version);
 
     config.build().ok()
 }

@@ -5,6 +5,7 @@ pub mod rules;
 pub mod testssl;
 
 pub use cert::fetch_cert_info;
+pub use config::check_tls_config;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TLSCertInfo {

@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use crate::tls::TLSVulnerability;
 
 #[derive(Debug, Deserialize)]
 pub struct VulnRule {
@@ -50,16 +51,15 @@ pub fn check_vulnerabilities(config: &super::TLSConfigInfo, cert: &super::TLSCer
     }
 
     // Certificate expiry detection
-    if let Ok(now) = chrono::Utc::now().naive_utc().timestamp() {
-        if let Ok(expiry) = chrono::NaiveDateTime::parse_from_str(&cert.not_after, "%Y-%m-%d %H:%M:%S") {
-            if expiry.timestamp() < now {
-                vulns.push(TLSVulnerability {
-                    id: "CERT-EXPIRED".into(),
-                    name: "Certificate Expired".into(),
-                    severity: "critical".into(),
-                    description: "TLS certificate has expired".into(),
-                });
-            }
+    let now = chrono::Utc::now().and_utc().timestamp();
+    if let Ok(expiry) = chrono::NaiveDateTime::parse_from_str(&cert.not_after, "%Y-%m-%d %H:%M:%S") {
+        if expiry.and_utc().timestamp() < now {
+            vulns.push(TLSVulnerability {
+                id: "CERT-EXPIRED".into(),
+                name: "Certificate Expired".into(),
+                severity: "critical".into(),
+                description: "TLS certificate has expired".into(),
+            });
         }
     }
 

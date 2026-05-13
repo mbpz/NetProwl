@@ -23,6 +23,7 @@ pub struct VulnRecord {
     pub severity: String,
 }
 
+#[derive(Debug, serde::Serialize)]
 pub struct SessionDetail {
     pub session: ScanSession,
     pub vulnerabilities: Vec<VulnRecord>,
