@@ -9,6 +9,7 @@
 //! - F3-6: Risk report generation
 
 pub mod credentials;
+pub mod default_creds;
 pub mod http_auth;
 pub mod tls_audit;
 pub mod unauthorized;
