@@ -31,7 +31,10 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: cd netprowl-pc && npm ci --ignore-scripts
+        run: |
+          npm install -g npm@9
+          cd netprowl-pc
+          npm ci
 
       - name: Build frontend
         run: cd netprowl-pc && npm run build
