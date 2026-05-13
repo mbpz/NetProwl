@@ -8,10 +8,10 @@ use crate::tls::TLSConfigInfo;
 /// Check which TLS protocol versions and cipher suites are supported by a server.
 pub fn check_tls_config(host: &str, port: u16) -> Result<TLSConfigInfo, String> {
     let versions: [ProtocolVersion; 4] = [
-        ProtocolVersion::TLSv13,
-        ProtocolVersion::TLSv12,
-        ProtocolVersion::TLSv11,
-        ProtocolVersion::TLSv10,
+        ProtocolVersion::TLSv1_3,
+        ProtocolVersion::TLSv1_2,
+        ProtocolVersion::TLSv1_1,
+        ProtocolVersion::TLSv1_0,
     ];
 
     let mut info = TLSConfigInfo {
@@ -44,10 +44,7 @@ pub fn check_tls_config(host: &str, port: u16) -> Result<TLSConfigInfo, String> 
         };
         let _ = sock.set_read_timeout(Some(std::time::Duration::from_secs(5)));
 
-        let mut stream = match StreamOwned::new(conn, sock) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
+        let mut stream = StreamOwned::new(conn, sock);
 
         // Try to read/write to force handshake
         let mut buf = [0u8; 1];
@@ -56,20 +53,20 @@ pub fn check_tls_config(host: &str, port: u16) -> Result<TLSConfigInfo, String> 
         // Check which version was negotiated
         let negotiated = stream.conn.protocol_version();
 
-        if negotiated == Some(ProtocolVersion::TLSv13) {
+        if negotiated == Some(ProtocolVersion::TLSv1_3) {
             info.supports_tls13 = true;
-        } else if negotiated == Some(ProtocolVersion::TLSv12) {
+        } else if negotiated == Some(ProtocolVersion::TLSv1_2) {
             info.supports_tls12 = true;
-        } else if negotiated == Some(ProtocolVersion::TLSv11) {
+        } else if negotiated == Some(ProtocolVersion::TLSv1_1) {
             info.supports_tls11 = true;
-        } else if negotiated == Some(ProtocolVersion::TLSv10) {
+        } else if negotiated == Some(ProtocolVersion::TLSv1_0) {
             info.supports_tls10 = true;
         }
     }
 
     // If TLS 1.2 is supported, enumerate cipher suites by negotiating and reading back
     if info.supports_tls12 {
-        let config = match build_config_for_version(ProtocolVersion::TLSv12) {
+        let config = match build_config_for_version(ProtocolVersion::TLSv1_2) {
             Some(cfg) => cfg,
             None => return Ok(info),
         };

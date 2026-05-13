@@ -32,7 +32,7 @@ pub fn detect_os(ttl: u8, open_ports: &[u16]) -> OsFingerprint {
     }
 
     // Primary inference from TTL
-    let (os, mut base_confidence) = if ttl <= 64 {
+    let (os, mut base_confidence): (OsType, f32) = if ttl <= 64 {
         (OsType::Linux, 0.7)
     } else if ttl <= 128 {
         (OsType::Windows, 0.7)

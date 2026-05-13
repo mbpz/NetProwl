@@ -1,7 +1,6 @@
 //! Pipeline orchestrator: runs scan tools and optionally fuzzing/vulnerability tools.
 
-mod tls;
-
+use crate::tls;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -125,22 +124,22 @@ pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<
             }
             let ip = port_info.ip.clone();
             let port = port_info.port;
+            let ip_for_results = ip.clone();
 
-            let (cert_info, config_info) = tokio::task::spawn_blocking(move || {
+            let tls_results = tokio::task::spawn_blocking(move || {
                 let cert = tls::fetch_cert_info(&ip, port);
                 let config = tls::check_tls_config(&ip, port);
                 (cert, config)
             })
             .await
-            .map_err(|e| format!("task join error: {}", e))?
-            .map_err(|e| format!("tls error: {}", e))?;
+            .map_err(|e| format!("task join error: {}", e))?;
 
-            if let (Ok(cert), Ok(config)) = (cert_info, config_info) {
+            if let (Ok(cert), Ok(config)) = tls_results {
                 let vulns = tls::rules::check_vulnerabilities(&config, &cert);
 
                 for vuln in &vulns {
                     results.push(PipelineResult::TLS {
-                        host: ip.clone(),
+                        host: ip_for_results.clone(),
                         port,
                         severity: vuln.severity.clone(),
                         message: format!("{}: {}", vuln.id, vuln.name),
@@ -166,26 +165,24 @@ pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<
 
     if opts.auto_nuclei && !open_ports.is_empty() {
         let cancel = cancel.clone();
-        let mut all_handles: Vec<_> = open_ports.iter().map(|port_info| {
+        let handles: Vec<_> = open_ports.iter().map(|port_info| {
             let target_url = https_url(&port_info.ip, port_info.port);
             tokio::task::spawn_blocking(move || run_nuclei(&target_url))
         }).collect();
 
-        for chunk in all_handles.chunks(20) {
+        for handle in handles {
             if cancel.is_cancelled() {
                 return Err("cancelled".to_string());
             }
-            for handle in chunk {
-                if let Ok(Ok(nuclei)) = handle.await {
-                    for n in nuclei {
-                        results.push(PipelineResult::Vulnerability {
-                            template: n.template,
-                            severity: n.severity,
-                            matched: n.matched,
-                            host: n.host,
-                            port: n.port,
-                        });
-                    }
+            if let Ok(Ok(nuclei)) = handle.await {
+                for n in nuclei {
+                    results.push(PipelineResult::Vulnerability {
+                        template: n.template,
+                        severity: n.severity,
+                        matched: n.matched,
+                        host: n.host,
+                        port: n.port,
+                    });
                 }
             }
         }
@@ -198,25 +195,23 @@ pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<
     if opts.auto_ffuf && !open_ports.is_empty() {
         let cancel = cancel.clone();
         let wl = wordlist.clone();
-        let mut all_handles: Vec<_> = open_ports.iter().map(|port_info| {
+        let handles: Vec<_> = open_ports.iter().map(|port_info| {
             let url = format!("{}/", https_url(&port_info.ip, port_info.port));
             let wl = wl.clone();
             tokio::task::spawn_blocking(move || run_ffuf(&url, &wl))
         }).collect();
 
-        for chunk in all_handles.chunks(20) {
+        for handle in handles {
             if cancel.is_cancelled() {
                 return Err("cancelled".to_string());
             }
-            for handle in chunk {
-                if let Ok(Ok(ffuf)) = handle.await {
-                    for fuzz in ffuf {
-                        results.push(PipelineResult::Fuzz {
-                            url: fuzz.url,
-                            method: fuzz.method,
-                            status: fuzz.status,
-                        });
-                    }
+            if let Ok(Ok(ffuf)) = handle.await {
+                for fuzz in ffuf {
+                    results.push(PipelineResult::Fuzz {
+                        url: fuzz.url,
+                        method: fuzz.method,
+                        status: fuzz.status,
+                    });
                 }
             }
         }
@@ -228,24 +223,22 @@ pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<
 
     if opts.auto_feroxbuster && !open_ports.is_empty() {
         let cancel = cancel.clone();
-        let mut all_handles: Vec<_> = open_ports.iter().map(|port_info| {
+        let handles: Vec<_> = open_ports.iter().map(|port_info| {
             let url = format!("{}/", https_url(&port_info.ip, port_info.port));
             tokio::task::spawn_blocking(move || run_feroxbuster(&url))
         }).collect();
 
-        for chunk in all_handles.chunks(20) {
+        for handle in handles {
             if cancel.is_cancelled() {
                 return Err("cancelled".to_string());
             }
-            for handle in chunk {
-                if let Ok(Ok(ferox)) = handle.await {
-                    for fuzz in ferox {
-                        results.push(PipelineResult::Fuzz {
-                            url: fuzz.url,
-                            method: fuzz.method,
-                            status: fuzz.status,
-                        });
-                    }
+            if let Ok(Ok(ferox)) = handle.await {
+                for fuzz in ferox {
+                    results.push(PipelineResult::Fuzz {
+                        url: fuzz.url,
+                        method: fuzz.method,
+                        status: fuzz.status,
+                    });
                 }
             }
         }

@@ -6,6 +6,7 @@ use chrono::Utc;
 mod schema;
 pub use schema::INIT_SQL;
 
+#[derive(Debug, serde::Serialize)]
 pub struct ScanSession {
     pub id: i64,
     pub target: String,
@@ -15,6 +16,7 @@ pub struct ScanSession {
     pub has_tls_audit: bool,
 }
 
+#[derive(Debug, serde::Serialize)]
 pub struct VulnRecord {
     pub host: String,
     pub port: u16,
@@ -30,7 +32,7 @@ pub struct SessionDetail {
 }
 
 pub struct HistoryDb {
-    conn: Mutex<Connection>,
+    pub conn: Mutex<Connection>,
 }
 
 impl HistoryDb {
