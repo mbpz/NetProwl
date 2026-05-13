@@ -33,7 +33,7 @@ export const useHistoryStore = create<HistoryStore>((set) => ({
   selectSession: (id) => set({ selectedSession: id }),
   deleteSession: async (id) => {
     await invoke('delete_scan_session', { sessionId: id });
-    set((s) => ({ sessions: s.sessions.filter((x) => x.id !== id), selectedSession: null }));
+    set((s: HistoryStore) => ({ sessions: s.sessions.filter((x: ScanSession) => x.id !== id), selectedSession: null }));
   },
   clearAll: async () => {
     await invoke('clear_scan_history');

@@ -31,9 +31,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: |
-          cd netprowl-pc
-          npm install --prefer-offline --no-audit --no-fund || npm install
+        run: cd netprowl-pc && npm ci
 
       - name: Build frontend
         run: cd netprowl-pc && npm run build
