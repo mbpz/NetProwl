@@ -40,7 +40,7 @@ impl Tool {
 }
 
 /// Status result for a tool
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ToolStatus {
     pub name: String,
     pub installed: bool,

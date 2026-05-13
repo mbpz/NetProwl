@@ -1,11 +1,12 @@
 mod scanner;
 
-use scanner::{
+pub use scanner::{
     Device, Port, PortState, WHITE_PORTS, FULL_PORTS,
     ip::expand_subnet,
     tcp::{self, TcpConfig},
     ssdp, mdns,
     registry::match_service,
+    tool_discovery::{ToolStatus, check_all_tools},
 };
 use std::sync::Mutex;
 
@@ -107,12 +108,17 @@ fn get_devices(state: tauri::State<'_, ScannerState>) -> Result<Vec<Device>, Str
     Ok(devices.clone())
 }
 
+#[tauri::command]
+fn check_tool_status() -> Vec<ToolStatus> {
+    check_all_tools()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(ScannerState::default())
-        .invoke_handler(tauri::generate_handler![start_scan, get_devices])
+        .invoke_handler(tauri::generate_handler![start_scan, get_devices, check_tool_status])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
