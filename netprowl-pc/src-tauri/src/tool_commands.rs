@@ -189,7 +189,7 @@ pub fn run_ffuf(url: &str, wordlist: &str) -> Result<Vec<FuzzResult>, String> {
 /// Run feroxbuster and parse JSON output lines
 pub fn run_feroxbuster(url: &str) -> Result<Vec<FuzzResult>, String> {
     let output = Command::new("feroxbuster")
-        .args(["-u", url, "--json", "--timeout", "10", "--rate-limit", "100"])
+        .args(["-u", url, "-j", "--timeout", "10", "--rate-limit", "100"])
         .output()
         .map_err(|e| format!("Failed to execute feroxbuster: {}", e))?;
 
