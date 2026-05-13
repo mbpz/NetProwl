@@ -41,6 +41,7 @@ pub struct PipelineOptions {
     pub auto_feroxbuster: bool,
     pub port_range: Option<String>,
     pub rate: Option<u32>,
+    pub wordlist: Option<String>,
 }
 
 pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<Vec<PipelineResult>, String> {
@@ -120,8 +121,14 @@ pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<
     // Step 4: If auto_ffuf, run ffuf
     if opts.auto_ffuf {
         let ffuf_url = format!("http://{}/FUZZ", opts.target);
-        let wordlist = "/usr/share/wordlists/dirb/common.txt";
-        let ffuf_results = tokio::task::spawn_blocking(move || run_ffuf(&ffuf_url, wordlist))
+        let wordlist = opts.wordlist.unwrap_or_else(|| {
+            if cfg!(target_os = "macos") {
+                "/usr/local/share/wordlists/dirb/common.txt".to_string()
+            } else {
+                "/usr/share/wordlists/dirb/common.txt".to_string()
+            }
+        });
+        let ffuf_results = tokio::task::spawn_blocking(move || run_ffuf(&ffuf_url, &wordlist))
             .await
             .map_err(|e| format!("task join error: {}", e))?
             .unwrap_or_default();

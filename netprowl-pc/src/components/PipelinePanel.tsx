@@ -5,11 +5,12 @@ export function PipelinePanel() {
   const { phase, target, selectedTool, autoNuclei, setPhase, setTarget, setSelectedTool, setAutoNuclei, addResults, clearResults } = usePipelineStore();
   const [portRange, setPortRange] = useState('1-1000');
   const [rate, setRate] = useState(1000);
+  const [wordlist, setWordlist] = useState('');
   const start = async () => {
     clearResults();
     setPhase('scanning');
     try {
-      const results = await invoke('start_pipeline', { opts: { target, scan_tool: selectedTool, auto_nuclei: autoNuclei, auto_ffuf: false, auto_feroxbuster: false, port_range: portRange, rate }});
+      const results = await invoke('start_pipeline', { opts: { target, scan_tool: selectedTool, auto_nuclei: autoNuclei, auto_ffuf: false, auto_feroxbuster: false, port_range: portRange, rate, wordlist: wordlist || null }});
       addResults(results as any);
       setPhase('done');
     } catch { setPhase('idle'); }
@@ -33,6 +34,7 @@ export function PipelinePanel() {
       <input type="text" value={portRange} onChange={e => setPortRange(e.target.value)} placeholder="1-1000" className="border rounded px-2 py-1 w-32" />
       {selectedTool === 'masscan' && <input type="number" value={rate} onChange={e => setRate(Number(e.target.value))} placeholder="rate" className="border rounded px-2 py-1 w-24" />}
       <label className="flex items-center gap-1"><input type="checkbox" checked={autoNuclei} onChange={e => setAutoNuclei(e.target.checked)} /> nuclei</label>
+      <input type="text" value={wordlist} onChange={e => setWordlist(e.target.value)} placeholder="wordlist (optional)" className="border rounded px-2 py-1 w-48" />
       <button onClick={start} disabled={phase !== 'idle'} className="bg-blue-600 text-white px-4 py-1 rounded disabled:opacity-50">
         {phase === 'idle' ? 'Start Scan' : phase}
       </button>
