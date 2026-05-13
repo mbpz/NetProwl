@@ -1,6 +1,25 @@
 //! Pipeline orchestrator: runs scan tools and optionally fuzzing/vulnerability tools.
 
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+#[derive(Debug, Clone)]
+pub struct CancelToken {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl CancelToken {
+    pub fn new() -> Self {
+        Self { cancelled: Arc::new(AtomicBool::new(false)) }
+    }
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Relaxed);
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Relaxed)
+    }
+}
 
 use crate::tool_commands::{run_ffuf, run_feroxbuster, run_masscan, run_nmap, run_nuclei, run_rustscan};
 
@@ -22,7 +41,7 @@ pub struct PipelineOptions {
     pub auto_feroxbuster: bool,
 }
 
-pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, String> {
+pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<Vec<PipelineResult>, String> {
     let mut results = Vec::new();
 
     // Step 1: Run port scanner in blocking thread
@@ -51,6 +70,10 @@ pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, 
         _ => return Err(format!("Unknown scan tool: {}", opts.scan_tool)),
     };
 
+    if cancel.is_cancelled() {
+        return Err("cancelled".to_string());
+    }
+
     // Step 2: Convert scan results to PipelineResult::Port
     for result in scan_results {
         results.push(PipelineResult::Port {
@@ -63,6 +86,9 @@ pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, 
     // Step 3: If auto_nuclei, run nuclei on each (ip, port)
     if opts.auto_nuclei {
         for port_result in &results {
+            if cancel.is_cancelled() {
+                return Err("cancelled".to_string());
+            }
             if let PipelineResult::Port { ip, port, .. } = port_result {
                 let target_url = format!("http://{}:{}", ip, port);
                 let nuclei_results = tokio::task::spawn_blocking(move || run_nuclei(&target_url))
@@ -82,6 +108,10 @@ pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, 
         }
     }
 
+    if cancel.is_cancelled() {
+        return Err("cancelled".to_string());
+    }
+
     // Step 4: If auto_ffuf, run ffuf
     if opts.auto_ffuf {
         let ffuf_url = format!("http://{}/FUZZ", opts.target);
@@ -99,6 +129,10 @@ pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, 
         }
     }
 
+    if cancel.is_cancelled() {
+        return Err("cancelled".to_string());
+    }
+
     // Step 5: If auto_feroxbuster, run feroxbuster
     if opts.auto_feroxbuster {
         let ferox_url = format!("http://{}", opts.target);
@@ -113,6 +147,10 @@ pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, 
                 status: fuzz.status,
             });
         }
+    }
+
+    if cancel.is_cancelled() {
+        return Err("cancelled".to_string());
     }
 
     Ok(results)

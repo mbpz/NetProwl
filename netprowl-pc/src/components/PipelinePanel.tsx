@@ -6,10 +6,14 @@ export function PipelinePanel() {
     clearResults();
     setPhase('scanning');
     try {
-      const results = await invoke('run_pipeline', { opts: { target, scan_tool: selectedTool, auto_nuclei: autoNuclei, auto_ffuf: false, auto_feroxbuster: false } });
+      const results = await invoke('start_pipeline', { opts: { target, scan_tool: selectedTool, auto_nuclei: autoNuclei, auto_ffuf: false, auto_feroxbuster: false } });
       addResults(results as any);
       setPhase('done');
     } catch { setPhase('idle'); }
+  };
+  const cancel = async () => {
+    await invoke('cancel_scan');
+    setPhase('idle');
   };
   return (
     <div className="flex gap-4 items-center">
@@ -27,6 +31,7 @@ export function PipelinePanel() {
       <button onClick={start} disabled={phase !== 'idle'} className="bg-blue-600 text-white px-4 py-1 rounded disabled:opacity-50">
         {phase === 'idle' ? 'Start Scan' : phase}
       </button>
+      {phase !== 'idle' && <button onClick={cancel} className="bg-red-600 text-white px-4 py-1 rounded">Cancel</button>}
     </div>
   );
 }

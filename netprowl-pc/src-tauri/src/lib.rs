@@ -10,6 +10,8 @@ pub use scanner::{
 };
 use std::sync::Mutex;
 
+use pipeline::{CancelToken, PipelineOptions, PipelineResult};
+
 #[derive(Debug, serde::Deserialize)]
 pub struct ScanOptions {
     pub subnet: String,
@@ -20,11 +22,12 @@ pub struct ScanOptions {
 
 pub struct ScannerState {
     pub devices: Mutex<Vec<Device>>,
+    pub cancel_token: Mutex<Option<CancelToken>>,
 }
 
 impl Default for ScannerState {
     fn default() -> Self {
-        Self { devices: Mutex::new(Vec::new()) }
+        Self { devices: Mutex::new(Vec::new()), cancel_token: Mutex::new(None) }
     }
 }
 
@@ -113,12 +116,36 @@ fn check_tool_status() -> Vec<ToolStatus> {
     check_all_tools()
 }
 
+#[tauri::command]
+async fn start_pipeline(opts: PipelineOptions, state: tauri::State<'_, ScannerState>) -> Result<Vec<PipelineResult>, String> {
+    let cancel = CancelToken::new();
+    {
+        let mut token = state.cancel_token.lock().map_err(|e| e.to_string())?;
+        *token = Some(cancel.clone());
+    }
+    let result = pipeline::run_pipeline(opts, cancel).await;
+    {
+        let mut token = state.cancel_token.lock().map_err(|e| e.to_string())?;
+        *token = None;
+    }
+    result
+}
+
+#[tauri::command]
+fn cancel_scan(state: tauri::State<'_, ScannerState>) -> Result<(), String> {
+    let token = state.cancel_token.lock().map_err(|e| e.to_string())?;
+    if let Some(t) = token.as_ref() {
+        t.cancel();
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(ScannerState::default())
-        .invoke_handler(tauri::generate_handler![start_scan, get_devices, check_tool_status])
+        .invoke_handler(tauri::generate_handler![start_scan, get_devices, check_tool_status, start_pipeline, cancel_scan])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
