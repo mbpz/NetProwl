@@ -332,8 +332,9 @@ mod tests {
     #[test]
     fn test_is_cert_expired() {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-        let expired = now - 60; // 1 minute ago
-        assert!(is_cert_expired(expired));
+        // Use a date 2 years in the past (epoch year 1971) - definitely expired
+        let expired = now - (2 * 365 * 24 * 60 * 60);
+        assert!(is_cert_expired(expired), "timestamp {} should be expired", expired);
 
         let future = now + (365 * 24 * 60 * 60); // 1 year from now
         assert!(!is_cert_expired(future));

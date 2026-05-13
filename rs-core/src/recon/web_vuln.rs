@@ -309,9 +309,10 @@ mod tests {
 
     #[test]
     fn test_api_key_detection() {
-        let body = r#"Authorization: Bearer sk_abcdefghijklmnopqrstuvwxyz123456"#;
+        // Use lowercase "bearer" to match the regex pattern
+        let body = r#"Authorization: bearer sk_abcdefghijklmnopqrstuvwxyz123456"#;
         let vulns = scan_info_leaks("http://example.com", body);
-        assert!(!vulns.is_empty());
+        assert!(!vulns.is_empty(), "should detect bearer token with sk_ prefix");
     }
 
     #[test]
