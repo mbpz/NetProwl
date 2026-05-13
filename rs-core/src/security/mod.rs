@@ -10,6 +10,7 @@
 
 pub mod credentials;
 pub mod default_creds;
+pub mod eos_db;
 pub mod http_auth;
 pub mod tls_audit;
 pub mod unauthorized;
@@ -70,6 +71,14 @@ pub use unauthorized::{
     test_kafka_unauth,
     test_unauthorized_access,
     common_unauth_ports,
+};
+
+pub use eos_db::{
+    FirmwareInfo,
+    RiskLevel as EosRiskLevel,
+    check_device_eos,
+    get_eos_devices,
+    get_devices_by_risk,
 };
 
 pub use firmware::{
