@@ -41,9 +41,9 @@ pub struct FuzzResult {
 }
 
 /// Run masscan and parse output lines like "Discovered open port 80/tcp on 1.2.3.4"
-pub fn run_masscan(target: &str, ports: &str) -> Result<Vec<MasscanResult>, String> {
+pub fn run_masscan(target: &str, ports: &str, rate: u32) -> Result<Vec<MasscanResult>, String> {
     let output = Command::new("masscan")
-        .args(["-p", ports, target, "--wait", "0"])
+        .args(["-p", ports, target, "--rate", &rate.to_string(), "--wait", "0"])
         .output()
         .map_err(|e| format!("Failed to execute masscan: {}", e))?;
 
@@ -210,9 +210,9 @@ pub fn run_feroxbuster(url: &str) -> Result<Vec<FuzzResult>, String> {
 }
 
 /// Run rustscan and parse JSON output lines
-pub fn run_rustscan(target: &str) -> Result<Vec<MasscanResult>, String> {
+pub fn run_rustscan(target: &str, port_range: &str, batch_size: u32) -> Result<Vec<MasscanResult>, String> {
     let output = Command::new("rustscan")
-        .args(["-a", target, "--json"])
+        .args(["-a", target, "-p", port_range, "-b", &batch_size.to_string(), "--json", "--ulimit", "5000", "-t", "2000"])
         .output()
         .map_err(|e| format!("Failed to execute rustscan: {}", e))?;
 

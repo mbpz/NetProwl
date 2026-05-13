@@ -39,30 +39,35 @@ pub struct PipelineOptions {
     pub auto_nuclei: bool,
     pub auto_ffuf: bool,
     pub auto_feroxbuster: bool,
+    pub port_range: Option<String>,
+    pub rate: Option<u32>,
 }
 
 pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<Vec<PipelineResult>, String> {
     let mut results = Vec::new();
+    let port_range = opts.port_range.clone().unwrap_or_else(|| "1-1000".to_string());
 
     // Step 1: Run port scanner in blocking thread
     let scan_results = match opts.scan_tool.as_str() {
         "masscan" => {
             let target = opts.target.clone();
-            tokio::task::spawn_blocking(move || run_masscan(&target, "1-1000"))
+            let rate = opts.rate.unwrap_or(1000);
+            tokio::task::spawn_blocking(move || run_masscan(&target, &port_range, rate))
                 .await
                 .map_err(|e| format!("task join error: {}", e))?
                 .map_err(|e| format!("masscan error: {}", e))?
         },
         "rustscan" => {
             let target = opts.target.clone();
-            tokio::task::spawn_blocking(move || run_rustscan(&target))
+            let batch = opts.rate.unwrap_or(4500);
+            tokio::task::spawn_blocking(move || run_rustscan(&target, &port_range, batch))
                 .await
                 .map_err(|e| format!("task join error: {}", e))?
                 .map_err(|e| format!("rustscan error: {}", e))?
         },
         "nmap" => {
             let target = opts.target.clone();
-            tokio::task::spawn_blocking(move || run_nmap(&target, "1-1000"))
+            tokio::task::spawn_blocking(move || run_nmap(&target, &port_range))
                 .await
                 .map_err(|e| format!("task join error: {}", e))?
                 .map_err(|e| format!("nmap error: {}", e))?
