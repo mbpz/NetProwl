@@ -17,6 +17,7 @@
   "devDependencies": {
     "@tarojs/cli": "4.0.0",
     "@types/react": "18.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "webpack": "^5.0.0"
   }
 }
