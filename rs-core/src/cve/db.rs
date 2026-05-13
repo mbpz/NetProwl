@@ -73,10 +73,10 @@ pub fn insert_cves(conn: &Connection, cves: &[CveRule]) -> Result<()> {
 }
 
 /// Simple version comparison: check if version falls within [version_min, version_max]
-/// Supports semver-style comparison and prefix matching.
-/// Returns true if v >= min AND v <= max
+/// Supports major.minor as floats (e.g. "1.2.3" -> 1.2, "2.0" -> 2.0, "10.0.1" -> 10.0).
+/// String fallback for non-numeric versions.
 fn version_in_range(version: &str, version_min: &str, version_max: &str) -> bool {
-    // Try semver-style parsing (major.minor.patch)
+    // Try float extraction: split on dots, compare major.minor as floats
     if let (Some(v), Some(min), Some(max)) = (
         parse_version(version),
         parse_version(version_min),
@@ -90,17 +90,24 @@ fn version_in_range(version: &str, version_min: &str, version_max: &str) -> bool
     v_prefix >= version_min.trim_start_matches('v') && v_prefix <= version_max.trim_start_matches('v')
 }
 
-fn parse_version(v: &str) -> Option<(u32, u32, u32)> {
+/// Parse version to major.minor as f64.
+/// "1.2.3" -> 1.2, "2.0" -> 2.0, "10.0.1" -> 10.0, "abc" -> None (uses string fallback)
+fn parse_version(v: &str) -> Option<f64> {
     let s = v.trim_start_matches('v');
     let parts: Vec<&str> = s.split('.').collect();
-    if parts.len() >= 2 {
-        let major = parts[0].parse().ok()?;
-        let minor = parts[1].parse().ok()?;
-        let patch = parts.get(2).and_then(|p| p.parse().ok()).unwrap_or(0);
-        Some((major, minor, patch))
-    } else {
-        None
+    if parts.is_empty() {
+        return None;
     }
+    let major: u32 = parts[0].parse().ok()?;
+    let minor: u32 = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0);
+    // Build major.minor as float: 1.2 -> 1.2, 10.0 -> 10.0
+    // minor < 10 -> divide by 10; minor >= 10 -> divide by 100 to get 1.10 not 1.1
+    let minor_frac = if minor < 10 {
+        minor as f64 / 10.0
+    } else {
+        minor as f64 / 100.0
+    };
+    Some(major as f64 + minor_frac)
 }
 
 /// Query CVEs for a given software and version
@@ -145,13 +152,21 @@ mod tests {
         assert!(version_in_range("1.3.0", "1.2.0", "1.3.0"));
         assert!(!version_in_range("1.1.9", "1.2.0", "1.3.0"));
         assert!(!version_in_range("1.4.0", "1.2.0", "1.3.0"));
+        // Edge cases: "2.0" -> 2.0
+        assert!(version_in_range("2.0", "2.0", "3.0"));
+        // "10.0.1" -> 10.0
+        assert!(version_in_range("10.0.1", "10.0", "11.0"));
+        // Non-numeric falls back to string
+        assert!(version_in_range("abc", "abc", "abc"));
     }
 
     #[test]
     fn test_parse_version() {
-        assert_eq!(parse_version("1.2.3"), Some((1, 2, 3)));
-        assert_eq!(parse_version("v2.0.0"), Some((2, 0, 0)));
-        assert_eq!(parse_version("1.2"), Some((1, 2, 0)));
+        assert_eq!(parse_version("1.2.3"), Some(1.2));
+        assert_eq!(parse_version("v2.0.0"), Some(2.0));
+        assert_eq!(parse_version("1.2"), Some(1.2));
+        assert_eq!(parse_version("2.0"), Some(2.0));
+        assert_eq!(parse_version("10.0.1"), Some(10.0));
         assert_eq!(parse_version("invalid"), None);
     }
 }
