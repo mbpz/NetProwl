@@ -1,22 +1,24 @@
-mod history;
+mod commands;
 mod pipeline;
-mod report;
+mod history;
+mod scan_history;
+mod scan_report;
 mod scanner;
-mod tool_commands;
 mod tls;
+mod tool_commands;
 
-pub use scanner::{
-    Device, Port, PortState, WHITE_PORTS, FULL_PORTS,
-    ip::expand_subnet,
-    tcp::{self, TcpConfig},
-    ssdp, mdns,
-    registry::match_service,
-    tool_discovery::{ToolStatus, check_all_tools},
-};
-use std::sync::Mutex;
+pub use history::{HistoryDb, ScanSession, SessionDetail, VulnRecord};
 
-pub use history::{ScanRecord, ScannedDevice, ScannedPort};
+pub use scan_history::{ScanRecord, ScannedDevice, ScannedPort};
 pub use pipeline::{CancelToken, PipelineOptions, PipelineResult};
+pub use tool_commands::{
+    run_ffuf, run_feroxbuster, run_masscan, run_nmap, run_nuclei, run_rustscan,
+};
+pub use commands::{
+    start_scan_session, end_scan_session, insert_scan_vulnerability,
+    get_scan_history, get_session_detail, delete_scan_session,
+    clear_scan_history, cleanup_scan_history,
+};
 
 #[derive(Debug, serde::Deserialize)]
 pub struct ScanOptions {
@@ -29,16 +31,27 @@ pub struct ScanOptions {
 pub struct ScannerState {
     pub devices: Mutex<Vec<Device>>,
     pub cancel_token: Mutex<Option<CancelToken>>,
-    pub history_db: Mutex<Option<history::HistoryDb>>,
+    pub db: Mutex<HistoryDb>,
 }
 
 impl Default for ScannerState {
     fn default() -> Self {
+        let db = Self::init_db();
         Self {
             devices: Mutex::new(Vec::new()),
             cancel_token: Mutex::new(None),
-            history_db: Mutex::new(None),
+            db: Mutex::new(db),
         }
+    }
+}
+
+impl ScannerState {
+    fn init_db() -> HistoryDb {
+        let db_path = dirs::data_local_dir()
+            .unwrap_or_else(|| std::path::PathBuf::from("."))
+            .join("netprowl-pc")
+            .join("history.db");
+        HistoryDb::new(&db_path).expect("failed to open history DB")
     }
 }
 
@@ -157,11 +170,10 @@ fn cancel_scan(state: tauri::State<'_, ScannerState>) -> Result<(), String> {
 
 fn with_history_db<T, F>(state: &ScannerState, f: F) -> Result<T, String>
 where
-    F: FnOnce(&history::HistoryDb) -> Result<T, String>,
+    F: FnOnce(&HistoryDb) -> Result<T, String>,
 {
-    let guard = state.history_db.lock().map_err(|e| e.to_string())?;
-    let db = guard.as_ref().ok_or_else(|| "history DB not initialized".to_string())?;
-    f(db)
+    let guard = state.db.lock().map_err(|e| e.to_string())?;
+    f(&guard)
 }
 
 #[tauri::command]
@@ -215,11 +227,11 @@ async fn delete_scan(scan_id: i64, state: tauri::State<'_, ScannerState>) -> Res
 #[tauri::command]
 async fn export_report(scan_id: i64, format: String, state: tauri::State<'_, ScannerState>) -> Result<String, String> {
     with_history_db(&state, |db| {
-        let full_report = report::build_report(db.conn(), scan_id)?;
+        let full_report = scan_report::build_report(db.conn(), scan_id)?;
         match format.as_str() {
-            "json" => Ok(report::export_json(&full_report)),
-            "html" => Ok(report::export_html(&full_report)),
-            "csv" => Ok(report::export_csv(&full_report)),
+            "json" => Ok(scan_report::export_json(&full_report)),
+            "html" => Ok(scan_report::export_html(&full_report)),
+            "csv" => Ok(scan_report::export_csv(&full_report)),
             _ => Err("unsupported format, use json|html|csv".to_string()),
         }
     })
@@ -242,11 +254,12 @@ fn tls_audit(host: String, port: u16) -> Result<tls::TLSAuditResult, String> {
     })
 }
 
-fn init_history_db(app: &tauri::App) -> history::HistoryDb {
-    let app_dir = app.path().app_data_dir().expect("app data dir");
-    std::fs::create_dir_all(&app_dir).expect("create app data dir");
-    let db_path = app_dir.join("netprowl.db");
-    history::HistoryDb::new(db_path).expect("open history DB")
+fn init_db() -> HistoryDb {
+    let db_path = dirs::data_local_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("netprowl-pc")
+        .join("history.db");
+    HistoryDb::new(&db_path).expect("failed to open history DB")
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -254,12 +267,6 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(ScannerState::default())
-        .setup(|app| {
-            let db = init_history_db(app);
-            let mut guard = app.state::<ScannerState>().history_db.lock().unwrap();
-            *guard = Some(db);
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             start_scan,
             get_devices,
@@ -272,6 +279,14 @@ pub fn run() {
             delete_scan,
             export_report,
             tls_audit,
+            start_scan_session,
+            end_scan_session,
+            insert_scan_vulnerability,
+            get_scan_history,
+            get_session_detail,
+            delete_scan_session,
+            clear_scan_history,
+            cleanup_scan_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
