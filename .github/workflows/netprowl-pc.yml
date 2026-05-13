@@ -34,7 +34,7 @@ jobs:
         run: |
           npm install -g npm@9
           cd netprowl-pc
-          npm ci
+          npm ci --registry=https://registry.npmjs.org
 
       - name: Build frontend
         run: cd netprowl-pc && npm run build
