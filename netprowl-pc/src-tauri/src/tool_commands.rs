@@ -12,6 +12,7 @@ pub struct MasscanResult {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct NmapResult {
+    pub ip: String,
     pub port: u16,
     pub state: String,
     pub service: String,
@@ -77,19 +78,62 @@ pub fn run_masscan(target: &str, ports: &str) -> Result<Vec<MasscanResult>, Stri
     Ok(results)
 }
 
-/// Run nmap with JSON output (stub implementation - returns empty results)
-pub fn run_nmap(target: &str) -> Result<Vec<NmapResult>, String> {
+/// Run nmap with grepable output and parse results
+pub fn run_nmap(target: &str, ports: &str) -> Result<Vec<NmapResult>, String> {
+    let out_file = format!(
+        "{}_nmap_out",
+        target.replace('.', "_").replace('/', "_")
+    );
     let output = Command::new("nmap")
-        .args(["-oJ", "-p", "1-1000", target])
+        .args(["-sT", "-sV", "-p", ports, "-oA", &out_file, target])
         .output()
-        .map_err(|e| format!("Failed to execute nmap: {}", e))?;
+        .map_err(|e| format!("nmap failed: {}", e))?;
 
     if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+        return Err(String::from_utf8_lossy(&output.stderr).into());
     }
 
-    // Stub: nmap JSON output parsing is complex; return empty for now
-    Ok(vec![])
+    let gnmap_path = format!("{}.gnmap", out_file);
+    let content = std::fs::read_to_string(&gnmap_path)
+        .map_err(|e| format!("failed to read nmap output: {}", e))?;
+
+    let mut results = Vec::new();
+    for line in content.lines() {
+        if !line.starts_with("Host:") {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('\t').collect();
+        let ip = parts.get(0).and_then(|p| p.split_whitespace().nth(1)).unwrap_or("").to_string();
+
+        if let Some(ports_part) = parts.get(1) {
+            if let Some(ports_str) = ports_part.strip_prefix("Ports: ") {
+                for port_entry in ports_str.split(',') {
+                    let entry_parts: Vec<&str> = port_entry.split('/').collect();
+                    if entry_parts.len() >= 3 {
+                        let port: u16 = entry_parts[0].parse().unwrap_or(0);
+                        let state = entry_parts[1];
+                        let service = entry_parts.get(5).unwrap_or(&"");
+                        results.push(NmapResult {
+                            ip: ip.clone(),
+                            port,
+                            state: state.to_string(),
+                            service: service.to_string(),
+                            product: String::new(),
+                            version: String::new(),
+                            banner: String::new(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Cleanup temp files
+    let _ = std::fs::remove_file(&gnmap_path);
+    let _ = std::fs::remove_file(format!("{}.nmap", out_file));
+    let _ = std::fs::remove_file(format!("{}.xml", out_file));
+
+    Ok(results)
 }
 
 /// Run nuclei and parse JSON output lines

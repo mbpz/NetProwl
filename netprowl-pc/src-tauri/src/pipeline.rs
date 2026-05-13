@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::tool_commands::{run_ffuf, run_feroxbuster, run_masscan, run_nuclei, run_rustscan};
+use crate::tool_commands::{run_ffuf, run_feroxbuster, run_masscan, run_nmap, run_nuclei, run_rustscan};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
@@ -40,6 +40,13 @@ pub async fn run_pipeline(opts: PipelineOptions) -> Result<Vec<PipelineResult>, 
                 .await
                 .map_err(|e| format!("task join error: {}", e))?
                 .map_err(|e| format!("rustscan error: {}", e))?
+        },
+        "nmap" => {
+            let target = opts.target.clone();
+            tokio::task::spawn_blocking(move || run_nmap(&target, "1-1000"))
+                .await
+                .map_err(|e| format!("task join error: {}", e))?
+                .map_err(|e| format!("nmap error: {}", e))?
         },
         _ => return Err(format!("Unknown scan tool: {}", opts.scan_tool)),
     };
