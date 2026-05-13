@@ -8,6 +8,9 @@ pub mod registry;
 pub mod mdns;
 pub mod ssdp;
 pub mod tool_discovery;
+pub mod os_fingerprint;
+
+pub use os_fingerprint::{OsFingerprint, OsType, detect_os};
 
 use serde::{Deserialize, Serialize};
 
