@@ -11,23 +11,6 @@ services:
       - netprowl-data:/app/data
     network_mode: host
     privileged: true
-    profiles:
-      - default
-
-  netprowl-dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    container_name: netprowl-pc-dev
-    environment:
-      - DISPLAY=${DISPLAY}
-    volumes:
-      - .:/app:rw
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    network_mode: host
-    privileged: true
-    profiles:
-      - dev
 
 volumes:
   netprowl-data:
