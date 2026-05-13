@@ -34,7 +34,8 @@ jobs:
         run: |
           npm install -g npm@9
           cd netprowl-pc
-          npm ci --registry=https://registry.npmjs.org
+          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+          npm install --registry=https://registry.npmjs.org
 
       - name: Build frontend
         run: cd netprowl-pc && npm run build

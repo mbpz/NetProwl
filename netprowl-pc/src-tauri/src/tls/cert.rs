@@ -57,7 +57,8 @@ pub fn fetch_cert_info(host: &str, port: u16) -> Result<TLSCertInfo, String> {
         .with_custom_certificate_verifier(Arc::new(NoVerifier))
         .with_no_client_auth();
 
-    let conn = ClientConnection::new(Arc::new(config), host.try_into().map_err(|e| format!("{:?}", e))?)
+    let host_owned = host.to_string();
+    let conn = ClientConnection::new(Arc::new(config), host_owned.try_into().map_err(|e| format!("{:?}", e))?)
         .map_err(|e| e.to_string())?;
 
     let mut sock = TcpStream::connect(format!("{}:{}", host, port))
@@ -96,9 +97,9 @@ pub fn fetch_cert_info(host: &str, port: u16) -> Result<TLSCertInfo, String> {
     let has_ocsp_stapling = cert.extensions().iter().any(|ext| ext.oid.as_bytes() == b"1.3.6.1.5.5.7.1.1");
 
     let pk_algorithm = &cert.public_key().algorithm.algorithm;
-    let key_algorithm = if pk_algorithm.oid == x509_parser::oid_registry::OID_RSA_ENCRYPTION {
+    let key_algorithm = if pk_algorithm.to_id_string().contains("1.2.840.113549.1.1") {
         "RSA".to_string()
-    } else if pk_algorithm.oid == x509_parser::oid_registry::OID_EC_PUBLIC_KEY {
+    } else if pk_algorithm.to_id_string().contains("1.2.840.10045.2.1") {
         "EC".to_string()
     } else {
         "unknown".to_string()

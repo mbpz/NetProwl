@@ -51,7 +51,7 @@ pub fn check_vulnerabilities(config: &super::TLSConfigInfo, cert: &super::TLSCer
     }
 
     // Certificate expiry detection
-    let now = chrono::Utc::now().and_utc().timestamp();
+    let now = chrono::Utc::now().timestamp();
     if let Ok(expiry) = chrono::NaiveDateTime::parse_from_str(&cert.not_after, "%Y-%m-%d %H:%M:%S") {
         if expiry.and_utc().timestamp() < now {
             vulns.push(TLSVulnerability {

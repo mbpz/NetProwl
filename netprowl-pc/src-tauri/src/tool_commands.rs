@@ -68,7 +68,6 @@ pub fn run_masscan(target: &str, ports: &str, rate: u32) -> Result<Vec<MasscanRe
                             ip: ip.to_string(),
                             port,
                             state: "open".to_string(),
-                            service: String::new(),
                         });
                     }
                 }
@@ -233,7 +232,6 @@ pub fn run_rustscan(target: &str, port_range: &str, batch_size: u32) -> Result<V
                     ip: ip.to_string(),
                     port: port as u16,
                     state: "open".to_string(),
-                    service: String::new(),
                 });
             }
         }
