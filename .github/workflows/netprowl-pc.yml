@@ -31,7 +31,9 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: cd netprowl-pc && npm ci
+        run: |
+          cd netprowl-pc
+          npm install --prefer-offline --no-audit --no-fund || npm install
 
       - name: Build frontend
         run: cd netprowl-pc && npm run build
@@ -67,13 +69,10 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install npm@9
-        run: npm install -g npm@9
-
       - name: Install dependencies
         run: |
           cd netprowl-pc
-          npm install --prefer-offline --no-audit --no-fund
+          npm install --prefer-offline --no-audit --no-fund || npm install
 
       - name: Build Tauri app
         run: |
