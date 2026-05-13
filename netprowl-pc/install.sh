@@ -14,7 +14,6 @@ if [ "$OS" = "Linux" ]; then
     install_tool rustscan "cargo install rustscan"
 else
     brew install masscan nmap
-    brew install nuclei
     go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
     go install github.com/ffuf/ffuf/v2@latest
     cargo install feroxbuster
