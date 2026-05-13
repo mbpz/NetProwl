@@ -17,8 +17,34 @@ export function HistoryDetail({ sessionId }: { sessionId: number }) {
     invoke<SessionDetail>('get_session_detail', { sessionId }).then(setDetail).catch(console.error);
   }, [sessionId]);
 
+  const handleExport = async (format: 'json' | 'html') => {
+    const data = await invoke<string>('export_session_json', { sessionId });
+    if (format === 'json') {
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `netprowl-session-${sessionId}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      const html = `<!DOCTYPE html><html><head><title>NetProwl Session ${sessionId}</title><style>body{font-family:system-ui;padding:40px}pre{white-space:pre-wrap}</style></head><body><h1>NetProwl Session ${sessionId}</h1><pre>${data}</pre></body></html>`;
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `netprowl-session-${sessionId}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
   return (
     <div className="p-3">
+      <div className="flex gap-2 mb-3">
+        <button onClick={() => handleExport('json')} className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">JSON</button>
+        <button onClick={() => handleExport('html')} className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">HTML</button>
+      </div>
       <button onClick={() => selectSession(null)} className="text-sm text-blue-600 hover:underline mb-3">← Back</button>
       {detail && (
         <>
