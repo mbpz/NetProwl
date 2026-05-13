@@ -33,15 +33,13 @@ jobs:
       - name: Install dependencies
         run: |
           npm install -g npm@9
+          npm config delete proxy
+          npm config delete https-proxy
           cd netprowl-pc
-          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
           npm install --registry=https://registry.npmjs.org
 
       - name: Build frontend
-        run: |
-          cd netprowl-pc
-          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
-          npm run build
+        run: cd netprowl-pc && npm run build
 
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
