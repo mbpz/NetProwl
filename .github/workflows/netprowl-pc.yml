@@ -30,9 +30,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        run: cd netprowl-pc && npm install --ignore-scripts
-
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -64,16 +61,18 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install npm@9
+        run: npm install -g npm@9
+
       - name: Install dependencies
         run: |
           cd netprowl-pc
-          npm cache clean --force 2>/dev/null || true
-          npm install --ignore-scripts --prefer-offline --no-audit --no-fund
+          npm install --prefer-offline --no-audit --no-fund
 
       - name: Build Tauri app
         run: |
           cd netprowl-pc
-          npx --yes @tauri-apps/cli@2 build --target ${{ matrix.target }}
+          ./node_modules/.bin/tauri build --target ${{ matrix.target }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
