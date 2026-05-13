@@ -53,8 +53,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: netprowl-mini/package-lock.json
 
       - name: Install dependencies
         run: cd netprowl-mini && npm install
