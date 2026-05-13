@@ -7,6 +7,7 @@
 //! - AI-4: Context-aware fix suggestions
 
 pub mod banner_parse;
+pub mod banner_parser; // DeepSeek AI banner parser
 pub mod attack_chain;
 pub mod diagnosis;
 pub mod fix_suggest;
@@ -15,6 +16,11 @@ pub mod fix_suggest;
 pub use banner_parse::{
     BannerAnalysis,
     parse_banner,
+};
+
+pub use banner_parser::{
+    BannerResult,
+    parse_banner_with_ai,
 };
 
 pub use attack_chain::{

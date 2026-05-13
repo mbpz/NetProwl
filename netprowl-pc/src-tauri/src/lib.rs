@@ -219,6 +219,11 @@ fn tls_audit(host: String, port: u16) -> Result<tls::TLSAuditResult, String> {
     })
 }
 
+#[tauri::command]
+async fn parse_banner_ai(banner: String, api_key: String) -> Result<rs_core::ai::BannerResult, String> {
+    rs_core::ai::banner_parser::parse_banner_with_ai(&banner, &api_key).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -231,6 +236,7 @@ pub fn run() {
             start_pipeline,
             cancel_scan,
             tls_audit,
+            parse_banner_ai,
             save_scan,
             export_report,
             export_session_json,
