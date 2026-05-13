@@ -2,6 +2,7 @@ import { ToolStatusBar } from '../components/ToolStatusBar';
 import { PipelinePanel } from '../components/PipelinePanel';
 import { UnifiedResultsPanel } from '../components/UnifiedResultsPanel';
 import { TLSResultPanel } from '../components/TLSResultPanel';
+import { HistoryDrawer } from '../components/HistoryDrawer';
 
 export function ScanPage() {
   return (
@@ -11,6 +12,7 @@ export function ScanPage() {
       <PipelinePanel />
       <UnifiedResultsPanel />
       <TLSResultPanel />
+      <HistoryDrawer />
     </div>
   );
 }

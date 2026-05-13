@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { useState } from 'react';
 import { usePipelineStore } from '../stores/pipelineStore';
+import { useHistoryStore } from '../stores/historyStore';
 export function PipelinePanel() {
   const { phase, target, selectedTool, autoNuclei, autoTlsAudit, autoTlsFull, setPhase, setTarget, setSelectedTool, setAutoNuclei, setAutoTlsAudit, setAutoTlsFull, addResults, clearResults } = usePipelineStore();
   const [portRange, setPortRange] = useState('1-1000');
@@ -41,6 +42,7 @@ export function PipelinePanel() {
         {phase === 'idle' ? 'Start Scan' : phase}
       </button>
       {phase !== 'idle' && <button onClick={cancel} className="bg-red-600 text-white px-4 py-1 rounded">Cancel</button>}
+      <button onClick={() => useHistoryStore.getState().setOpen(true)} className="bg-gray-200 text-gray-700 px-4 py-1 rounded">History</button>
     </div>
   );
 }
