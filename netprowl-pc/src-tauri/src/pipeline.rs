@@ -107,7 +107,7 @@ pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<
                         severity: nuclei.severity,
                         matched: nuclei.matched,
                         host: nuclei.host,
-                        port: nuclei.port as u16,
+                        port: nuclei.port,
                     });
                 }
             }
