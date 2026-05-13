@@ -3,7 +3,8 @@ use std::path::Path;
 use std::sync::Mutex;
 use chrono::Utc;
 
-use super::schema::INIT_SQL;
+mod schema;
+pub use schema::INIT_SQL;
 
 pub struct ScanSession {
     pub id: i64,
@@ -142,5 +143,32 @@ impl HistoryDb {
         let cutoff = Utc::now().timestamp() - (max_days * 86400);
         let deleted = conn.execute("DELETE FROM scan_sessions WHERE started_at < ?1", params![cutoff],).map_err(|e| e.to_string())?;
         Ok(deleted as usize)
+    }
+
+    pub fn save_device(&self, session_id: i64, ip: &str, mac: Option<&str>, vendor: Option<&str>, source: &str) -> Result<i64, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO devices (session_id, ip, mac, vendor, source) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![session_id, ip, mac, vendor, source],
+        ).map_err(|e| e.to_string())?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn save_port(&self, session_id: i64, device_id: i64, port: i32, state: &str, service: Option<&str>, banner: Option<&str>) -> Result<i64, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT INTO ports (session_id, device_id, port, state, service, banner) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![session_id, device_id, port, state, service, banner],
+        ).map_err(|e| e.to_string())?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn get_devices_for_session(&self, session_id: i64) -> Result<Vec<(String, Option<String>, Option<String>)>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare("SELECT ip, mac, vendor FROM devices WHERE session_id = ?1").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map(params![session_id], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        }).map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     }
 }
