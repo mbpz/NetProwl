@@ -64,3 +64,4 @@ For local signing:
 # Run dev server
 npm run tauri dev
 ```
+test1778634639
