@@ -28,7 +28,7 @@ use crate::tool_commands::{run_ffuf, run_feroxbuster, run_masscan, run_nmap, run
 pub enum PipelineResult {
     Port { ip: String, port: u16, state: String },
     Service { ip: String, port: u16, service: String, banner: String },
-    Vulnerability { template: String, severity: String, matched: String, host: String, port: u16 },
+    Vulnerability { template: String, severity: String, matched: String, host: String, port: u32 },
     Fuzz { url: String, method: String, status: u16 },
 }
 
@@ -118,9 +118,8 @@ pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<
         return Err("cancelled".to_string());
     }
 
-    // Step 4: If auto_ffuf, run ffuf
+    // Step 4: If auto_ffuf, run ffuf on each discovered port
     if opts.auto_ffuf {
-        let ffuf_url = format!("http://{}/FUZZ", opts.target);
         let wordlist = opts.wordlist.unwrap_or_else(|| {
             if cfg!(target_os = "macos") {
                 "/usr/local/share/wordlists/dirb/common.txt".to_string()
@@ -128,16 +127,24 @@ pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<
                 "/usr/share/wordlists/dirb/common.txt".to_string()
             }
         });
-        let ffuf_results = tokio::task::spawn_blocking(move || run_ffuf(&ffuf_url, &wordlist))
-            .await
-            .map_err(|e| format!("task join error: {}", e))?
-            .unwrap_or_default();
-        for fuzz in ffuf_results {
-            results.push(PipelineResult::Fuzz {
-                url: fuzz.url,
-                method: fuzz.method,
-                status: fuzz.status,
-            });
+        for port_result in &results {
+            if cancel.is_cancelled() {
+                return Err("cancelled".to_string());
+            }
+            if let PipelineResult::Port { ip, port, .. } = port_result {
+                let url = format!("http://{}:{}/", ip, port);
+                let ffuf_results = tokio::task::spawn_blocking(move || run_ffuf(&url, &wordlist))
+                    .await
+                    .map_err(|e| format!("task join error: {}", e))?
+                    .unwrap_or_default();
+                for fuzz in ffuf_results {
+                    results.push(PipelineResult::Fuzz {
+                        url: fuzz.url,
+                        method: fuzz.method,
+                        status: fuzz.status,
+                    });
+                }
+            }
         }
     }
 
@@ -145,19 +152,26 @@ pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<
         return Err("cancelled".to_string());
     }
 
-    // Step 5: If auto_feroxbuster, run feroxbuster
+    // Step 5: If auto_feroxbuster, run feroxbuster on each discovered port
     if opts.auto_feroxbuster {
-        let ferox_url = format!("http://{}", opts.target);
-        let feroxbuster_results = tokio::task::spawn_blocking(move || run_feroxbuster(&ferox_url))
-            .await
-            .map_err(|e| format!("task join error: {}", e))?
-            .unwrap_or_default();
-        for fuzz in feroxbuster_results {
-            results.push(PipelineResult::Fuzz {
-                url: fuzz.url,
-                method: fuzz.method,
-                status: fuzz.status,
-            });
+        for port_result in &results {
+            if cancel.is_cancelled() {
+                return Err("cancelled".to_string());
+            }
+            if let PipelineResult::Port { ip, port, .. } = port_result {
+                let url = format!("http://{}:{}/", ip, port);
+                let feroxbuster_results = tokio::task::spawn_blocking(move || run_feroxbuster(&url))
+                    .await
+                    .map_err(|e| format!("task join error: {}", e))?
+                    .unwrap_or_default();
+                for fuzz in feroxbuster_results {
+                    results.push(PipelineResult::Fuzz {
+                        url: fuzz.url,
+                        method: fuzz.method,
+                        status: fuzz.status,
+                    });
+                }
+            }
         }
     }
 
