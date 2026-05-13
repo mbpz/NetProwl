@@ -1,4 +1,9 @@
+mod history;
+mod pipeline;
+mod report;
 mod scanner;
+mod tool_commands;
+mod tls;
 
 pub use scanner::{
     Device, Port, PortState, WHITE_PORTS, FULL_PORTS,
@@ -10,7 +15,8 @@ pub use scanner::{
 };
 use std::sync::Mutex;
 
-use pipeline::{CancelToken, PipelineOptions, PipelineResult};
+pub use history::{ScanRecord, ScannedDevice, ScannedPort};
+pub use pipeline::{CancelToken, PipelineOptions, PipelineResult};
 
 #[derive(Debug, serde::Deserialize)]
 pub struct ScanOptions {
@@ -23,11 +29,16 @@ pub struct ScanOptions {
 pub struct ScannerState {
     pub devices: Mutex<Vec<Device>>,
     pub cancel_token: Mutex<Option<CancelToken>>,
+    pub history_db: Mutex<Option<history::HistoryDb>>,
 }
 
 impl Default for ScannerState {
     fn default() -> Self {
-        Self { devices: Mutex::new(Vec::new()), cancel_token: Mutex::new(None) }
+        Self {
+            devices: Mutex::new(Vec::new()),
+            cancel_token: Mutex::new(None),
+            history_db: Mutex::new(None),
+        }
     }
 }
 
@@ -48,11 +59,11 @@ async fn start_scan(opts: ScanOptions, state: tauri::State<'_, ScannerState>) ->
         return Err("unsupported subnet format (only /24 supported)".into());
     }
 
-    // SSDP + mDNS 并发
+    // SSDP + mDNS concurrently
     let ssdp_handle = tokio::spawn(async move { ssdp::discover_ssdp(5000).await });
     let mdns_handle = tokio::spawn(async move { mdns::discover_mdns(5000).await });
 
-    // TCP 扫描每个 IP
+    // TCP scan each IP
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(cfg.concurrency));
     let mut handles = Vec::new();
 
@@ -120,12 +131,12 @@ fn check_tool_status() -> Vec<ToolStatus> {
 async fn start_pipeline(opts: PipelineOptions, state: tauri::State<'_, ScannerState>) -> Result<Vec<PipelineResult>, String> {
     let cancel = CancelToken::new();
     {
-        let mut token = state.cancel_token.lock().map_err(|e| e.to_string())?;
+        let mut token = state.cancel_token.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
         *token = Some(cancel.clone());
     }
     let result = pipeline::run_pipeline(opts, cancel).await;
     {
-        let mut token = state.cancel_token.lock().map_err(|e| e.to_string())?;
+        let mut token = state.cancel_token.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
         *token = None;
     }
     result
@@ -133,11 +144,109 @@ async fn start_pipeline(opts: PipelineOptions, state: tauri::State<'_, ScannerSt
 
 #[tauri::command]
 fn cancel_scan(state: tauri::State<'_, ScannerState>) -> Result<(), String> {
-    let token = state.cancel_token.lock().map_err(|e| e.to_string())?;
+    let token = state.cancel_token.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
     if let Some(t) = token.as_ref() {
         t.cancel();
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// History commands
+// ---------------------------------------------------------------------------
+
+fn with_history_db<T, F>(state: &ScannerState, f: F) -> Result<T, String>
+where
+    F: FnOnce(&history::HistoryDb) -> Result<T, String>,
+{
+    let guard = state.history_db.lock().map_err(|e| e.to_string())?;
+    let db = guard.as_ref().ok_or_else(|| "history DB not initialized".to_string())?;
+    f(db)
+}
+
+#[tauri::command]
+async fn save_scan(subnet: String, device_count: usize, notes: Option<String>, state: tauri::State<'_, ScannerState>) -> Result<i64, String> {
+    let scan = ScanRecord {
+        id: None,
+        subnet,
+        device_count,
+        timestamp: chrono::Utc::now().timestamp(),
+        notes,
+    };
+    let devices = {
+        let devs = state.devices.lock().map_err(|e| e.to_string())?;
+        devs.clone()
+    };
+
+    with_history_db(&state, |db| {
+        let conn = db.conn().lock().map_err(|e| e.to_string())?;
+        db.save_scan(&scan, &devices).map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+async fn get_scans(state: tauri::State<'_, ScannerState>) -> Result<Vec<ScanRecord>, String> {
+    with_history_db(&state, |db| {
+        let conn = db.conn().lock().map_err(|e| e.to_string())?;
+        db.load_scans().map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+async fn get_scan_devices(scan_id: i64, state: tauri::State<'_, ScannerState>) -> Result<Vec<ScannedDevice>, String> {
+    with_history_db(&state, |db| {
+        let conn = db.conn().lock().map_err(|e| e.to_string())?;
+        db.load_scan_devices(scan_id).map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+async fn delete_scan(scan_id: i64, state: tauri::State<'_, ScannerState>) -> Result<(), String> {
+    with_history_db(&state, |db| {
+        let conn = db.conn().lock().map_err(|e| e.to_string())?;
+        db.delete_scan(scan_id).map_err(|e| e.to_string())
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Report export command
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn export_report(scan_id: i64, format: String, state: tauri::State<'_, ScannerState>) -> Result<String, String> {
+    with_history_db(&state, |db| {
+        let full_report = report::build_report(db.conn(), scan_id)?;
+        match format.as_str() {
+            "json" => Ok(report::export_json(&full_report)),
+            "html" => Ok(report::export_html(&full_report)),
+            "csv" => Ok(report::export_csv(&full_report)),
+            _ => Err("unsupported format, use json|html|csv".to_string()),
+        }
+    })
+}
+
+#[tauri::command]
+fn tls_audit(host: String, port: u16) -> Result<tls::TLSAuditResult, String> {
+    let cert = tls::fetch_cert_info(&host, port)
+        .map_err(|e| e.to_string())?;
+    let config = tls::check_tls_config(&host, port)
+        .map_err(|e| e.to_string())?;
+    let vulns = tls::rules::check_vulnerabilities(&config, &cert);
+    Ok(tls::TLSAuditResult {
+        host,
+        port,
+        cert,
+        config,
+        vulnerabilities: vulns,
+        testssl_used: false,
+    })
+}
+
+fn init_history_db(app: &tauri::App) -> history::HistoryDb {
+    let app_dir = app.path().app_data_dir().expect("app data dir");
+    std::fs::create_dir_all(&app_dir).expect("create app data dir");
+    let db_path = app_dir.join("netprowl.db");
+    history::HistoryDb::new(db_path).expect("open history DB")
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -145,7 +254,25 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(ScannerState::default())
-        .invoke_handler(tauri::generate_handler![start_scan, get_devices, check_tool_status, start_pipeline, cancel_scan])
+        .setup(|app| {
+            let db = init_history_db(app);
+            let mut guard = app.state::<ScannerState>().history_db.lock().unwrap();
+            *guard = Some(db);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            start_scan,
+            get_devices,
+            check_tool_status,
+            start_pipeline,
+            cancel_scan,
+            save_scan,
+            get_scans,
+            get_scan_devices,
+            delete_scan,
+            export_report,
+            tls_audit,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -1,6 +1,7 @@
 import { ToolStatusBar } from '../components/ToolStatusBar';
 import { PipelinePanel } from '../components/PipelinePanel';
 import { UnifiedResultsPanel } from '../components/UnifiedResultsPanel';
+import { TLSResultPanel } from '../components/TLSResultPanel';
 
 export function ScanPage() {
   return (
@@ -9,6 +10,7 @@ export function ScanPage() {
       <ToolStatusBar />
       <PipelinePanel />
       <UnifiedResultsPanel />
+      <TLSResultPanel />
     </div>
   );
 }
