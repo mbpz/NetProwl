@@ -39,7 +39,13 @@ jobs:
           npm install
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        run: |
+          set -x
+          pwd
+          ls package.json 2>/dev/null && echo "At root" || echo "Not at root"
+          cd netprowl-pc && pwd && ls package.json
+          npm run build
+          npm run tauri build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
