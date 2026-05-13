@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y --no-install-recommends \
     masscan nmap \
-    && curl -sSL https://github.com/projectdiscovery/nuclei/releases/download/v3.3.0/nuclei_linux_amd64.zip -o /usr/local/bin/nuclei \
+    && curl -sSL https://github.com/projectdiscovery/nuclei/releases/latest/download/nuclei_linux_amd64.zip -o /usr/local/bin/nuclei \
     && chmod +x /usr/local/bin/nuclei \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=frontend-builder /app/dist /app/dist
