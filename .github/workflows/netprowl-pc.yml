@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd netprowl-pc
-          npm install --force
+          npm ci
 
       - name: Build frontend
         run: |
@@ -76,7 +76,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd netprowl-pc
-          npm install --force
+          npm ci
 
       - name: Build Tauri app
         run: |
