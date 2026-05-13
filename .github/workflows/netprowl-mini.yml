@@ -55,7 +55,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: cd netprowl-mini && npm install
+        run: cd netprowl-mini && npm install --legacy-peer-deps
 
       - name: Build WeChat mini program
         run: cd netprowl-mini && npm run build:weapp
