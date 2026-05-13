@@ -36,6 +36,10 @@ lazy_static = "1"
 base16 = "0.2"
 which = "4"
 
+# 数据库
+rusqlite = { version = "0.31", features = ["bundled"] }
+dirs = "5"
+
 [profile.release]
 panic = "abort"
 codegen-units = 1
