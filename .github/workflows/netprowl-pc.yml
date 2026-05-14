@@ -25,32 +25,31 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '20'
+          bun-version: latest
 
       - name: Install dependencies
         run: |
           export HOME=/home/runner
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY
-          rm -f ~/.npmrc
-          npm config set proxy ""
-          npm config set https-proxy ""
-          npm config set noproxy ""
-          npm config set registry https://registry.npmjs.org
-          npm config set fetch-retry-mintimeout 20000
-          npm config set fetch-retry-maxtimeout 120000
+          rm -f ~/.npmrc ~/.bunrc
           cd netprowl-pc
-          HOME=/home/runner npm install --registry=https://registry.npmjs.org || HOME=/home/runner npm install --registry=https://registry.npmjs.org
+          bun install --registry=https://registry.npmjs.org
 
       - name: Build frontend
-        run: cd netprowl-pc && npm run build
+        run: |
+          cd netprowl-pc
+          bun run build
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        run: |
+          cd netprowl-pc/src-tauri
+          cargo build --release --target x86_64-unknown-linux-gnu
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_NET_GIT_FETCH_WITH_CLI: true
 
   build-macos:
     name: Build macOS ${{ matrix.arch }}
