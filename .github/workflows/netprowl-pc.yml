@@ -35,7 +35,9 @@ jobs:
           export HOME=/home/runner
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY
           rm -f ~/.npmrc
-          npm config set proxy "" && npm config set https-proxy "" && npm config set no-proxy ""
+          npm config set proxy ""
+          npm config set https-proxy ""
+          npm config set noproxy ""
           npm config set registry https://registry.npmjs.org
           npm config set fetch-timeout 60000
           cd netprowl-pc
