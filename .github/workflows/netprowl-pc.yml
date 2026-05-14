@@ -39,9 +39,10 @@ jobs:
           npm config set https-proxy ""
           npm config set noproxy ""
           npm config set registry https://registry.npmjs.org
-          npm config set fetch-timeout 60000
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
           cd netprowl-pc
-          HOME=/home/runner npm install --registry=https://registry.npmjs.org
+          HOME=/home/runner npm install --registry=https://registry.npmjs.org || HOME=/home/runner npm install --registry=https://registry.npmjs.org
 
       - name: Build frontend
         run: cd netprowl-pc && npm run build
@@ -82,6 +83,7 @@ jobs:
           export HOME=/Users/runner
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY
           rm -f ~/.npmrc ~/.bunrc
+          cd netprowl-pc
           bun install --registry=https://registry.npmjs.org
 
       - name: Build Tauri app
