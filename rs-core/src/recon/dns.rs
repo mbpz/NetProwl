@@ -31,6 +31,21 @@ pub struct DnsRecon {
     pub cdn: Option<String>,
 }
 
+/// Subdomain enumeration result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubdomainResult {
+    pub domain: String,
+    pub subdomains: Vec<String>,
+    pub records: Vec<DNSRecord>,
+}
+
+/// DNS record for subdomain results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DNSRecord {
+    pub rtype: String,
+    pub value: String,
+}
+
 /// Cloud provider identification
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CloudProvider {
@@ -317,8 +332,82 @@ pub fn dns_recon(domain: &str) -> DnsRecon {
         records,
         subdomains,
         cloud_provider,
-        cdn: None, // Will be set by caller after HTTP checks
+        cdn: None,
     }
+}
+
+/// Enumerate subdomains using crt.sh Certificate Transparency
+pub async fn enumerate_subdomains(domain: &str) -> Result<SubdomainResult, String> {
+    let url = format!("https://crt.sh/?q=%25.{}&output=json", domain);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("HTTP client failed: {}", e))?;
+
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("crt.sh request failed: {}", e))?;
+
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+
+    let entries: Vec<CrtShEntry> = serde_json::from_str(&body)
+        .map_err(|e| format!("Failed to parse crtsh response: {}", e))?;
+
+    let subdomains: Vec<String> = entries.iter()
+        .filter_map(|e| e.name_value.clone())
+        .filter(|name| name.contains(domain))
+        .map(|name| {
+            name.split('\n')
+                .filter(|s| s.contains(domain) && !s.starts_with('*'))
+                .map(|s| s.to_lowercase())
+                .collect::<Vec<_>>()
+        })
+        .flatten()
+        .collect();
+
+    let mut subdomains = subdomains;
+    subdomains.sort();
+    subdomains.dedup();
+
+    Ok(SubdomainResult {
+        domain: domain.to_string(),
+        subdomains,
+        records: Vec::new(),
+    })
+}
+
+/// Resolve DNS for a specific record type using system resolver
+pub async fn resolve_dns(domain: &str, rtype: &str) -> Result<Vec<String>, String> {
+    let rtype_lower = rtype.to_lowercase();
+    let values: Vec<String> = match rtype_lower.as_str() {
+        "a" => {
+            let socket_addrs: Vec<std::net::SocketAddr> = (domain, 0)
+                .to_socket_addrs()
+                .map_err(|e| format!("A record lookup failed: {}", e))?
+                .collect();
+            socket_addrs.iter()
+                .filter(|addr| addr.is_ipv4())
+                .map(|addr| addr.ip().to_string())
+                .collect()
+        }
+        "aaaa" => {
+            let socket_addrs: Vec<std::net::SocketAddr> = (domain, 0)
+                .to_socket_addrs()
+                .map_err(|e| format!("AAAA record lookup failed: {}", e))?
+                .collect();
+            socket_addrs.iter()
+                .filter(|addr| addr.is_ipv6())
+                .map(|addr| addr.ip().to_string())
+                .collect()
+        }
+        _ => return Err(format!("Unsupported record type: {}", rtype)),
+    };
+    Ok(values)
 }
 
 #[cfg(test)]
