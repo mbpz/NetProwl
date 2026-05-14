@@ -29,12 +29,10 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "sha256_arm64=$SHA256_ARM64" >> $GITHUB_OUTPUT
           echo "sha256_x64=$SHA256_X64" >> $GITHUB_OUTPUT
-          echo "::set-output name=sha256_arm64::$SHA256_ARM64"
-          echo "::set-output name=sha256_x64::$SHA256_X64"
 
       - name: Update tap
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           VERSION: ${{ steps.patch.outputs.version }}
           SHA256_ARM64: ${{ steps.patch.outputs.sha256_arm64 }}
           SHA256_X64: ${{ steps.patch.outputs.sha256_x64 }}

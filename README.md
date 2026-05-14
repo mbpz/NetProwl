@@ -51,7 +51,15 @@ NetProwl/
 └── docs/                # 规格书 + 设计文档
 ```
 
-## 快速开始
+## 安装
+
+### macOS (Homebrew)
+
+```bash
+brew install mbpz/tap/NetProwl
+```
+
+首次安装需要输入密码授权系统扩展。
 
 ### PC 版
 
