@@ -1,5 +1,29 @@
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Duration;
+
+/// CDN/WAF type enum as specified in requirements
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CDNType {
+    Cloudflare,
+    Akamai,
+    AliyunWAF,
+    TencentWAF,
+    None,
+}
+
+impl CDNType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CDNType::Cloudflare => "Cloudflare",
+            CDNType::Akamai => "Akamai",
+            CDNType::AliyunWAF => "Aliyun WAF",
+            CDNType::TencentWAF => "Tencent WAF",
+            CDNType::None => "None",
+        }
+    }
+}
 
 /// WAF and CDN provider types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -196,9 +220,110 @@ pub fn analyze_waf_cdn(ip: &str, headers: HashMap<String, String>, body: String,
     }
 }
 
+/// Detect CDN/WAF type from HTTP response headers
+pub fn detect_waf_cdn(headers: &HashMap<String, String>) -> CDNType {
+    // Check for Cloudflare: CF-Ray header
+    if headers.contains_key("cf-ray") || headers.contains_key("cf-cache-status") {
+        return CDNType::Cloudflare;
+    }
+
+    // Check for Akamai: X-Akamai-* headers
+    if headers.get("server").map(|v| v.contains("Akamai")).unwrap_or(false) {
+        return CDNType::Akamai;
+    }
+    if headers.keys().any(|k| k.starts_with("x-akamai-")) {
+        return CDNType::Akamai;
+    }
+
+    // Check for Aliyun WAF: X-Powered-By-Alibaba / specific error pages
+    if headers.get("x-powered-by").map(|v| v.contains("Alibaba")).unwrap_or(false) {
+        return CDNType::AliyunWAF;
+    }
+    if headers.get("x-powered-by").map(|v| v.contains("Aliyun")).unwrap_or(false) {
+        return CDNType::AliyunWAF;
+    }
+
+    // Check for Tencent Cloud WAF: specific headers and response codes
+    if headers.contains_key("x-tencent-cn") || headers.contains_key("tencent-cdn") {
+        return CDNType::TencentWAF;
+    }
+
+    CDNType::None
+}
+
+/// Async function to detect WAF/CDN from a URL
+pub async fn detect_waf_from_url(url: &str) -> Result<CDNType, String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get(url)
+        .header("User-Agent", "Mozilla/5.0 (compatible; NetProwl/1.0)")
+        .send()
+        .await
+        .map_err(|e| format!("HTTP request failed: {}", e))?;
+
+    let headers: HashMap<String, String> = response
+        .headers()
+        .iter()
+        .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+        .collect();
+
+    Ok(detect_waf_cdn(&headers))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_detect_waf_cdn_cloudflare() {
+        let mut headers = HashMap::new();
+        headers.insert("cf-ray".to_string(), "abc123xyz".to_string());
+
+        assert_eq!(detect_waf_cdn(&headers), CDNType::Cloudflare);
+    }
+
+    #[test]
+    fn test_detect_waf_cdn_akamai() {
+        let mut headers = HashMap::new();
+        headers.insert("x-akamai-request-id".to_string(), "req123".to_string());
+
+        assert_eq!(detect_waf_cdn(&headers), CDNType::Akamai);
+    }
+
+    #[test]
+    fn test_detect_waf_cdn_aliyun() {
+        let mut headers = HashMap::new();
+        headers.insert("x-powered-by".to_string(), "Aliyun".to_string());
+
+        assert_eq!(detect_waf_cdn(&headers), CDNType::AliyunWAF);
+    }
+
+    #[test]
+    fn test_detect_waf_cdn_tencent() {
+        let mut headers = HashMap::new();
+        headers.insert("x-tencent-cn".to_string(), "1".to_string());
+
+        assert_eq!(detect_waf_cdn(&headers), CDNType::TencentWAF);
+    }
+
+    #[test]
+    fn test_detect_waf_cdn_none() {
+        let headers = HashMap::new();
+        assert_eq!(detect_waf_cdn(&headers), CDNType::None);
+    }
+
+    #[test]
+    fn test_cdntype_as_str() {
+        assert_eq!(CDNType::Cloudflare.as_str(), "Cloudflare");
+        assert_eq!(CDNType::Akamai.as_str(), "Akamai");
+        assert_eq!(CDNType::AliyunWAF.as_str(), "Aliyun WAF");
+        assert_eq!(CDNType::TencentWAF.as_str(), "Tencent WAF");
+        assert_eq!(CDNType::None.as_str(), "None");
+    }
 
     #[test]
     fn test_cloudflare_detection() {
