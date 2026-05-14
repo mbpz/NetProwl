@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use reqwest::Client;
+use std::time::Duration;
 
 /// Device in network diagnosis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +37,15 @@ pub struct DiagnosisReport {
     pub critical_issues: Vec<CriticalIssue>,
     pub medium_issues: Vec<MediumIssue>,
     pub recommendations: Vec<String>,
+}
+
+/// Result of DeepSeek vulnerability diagnosis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiagnosisResult {
+    pub summary: String,
+    pub risk_level: String,
+    pub immediate_actions: Vec<String>,
+    pub technical_details: String,
 }
 
 /// Generate Chinese natural language diagnosis report
@@ -209,6 +220,90 @@ fn generate_recommendations(
     }
 
     recs
+}
+
+/// Diagnose a specific vulnerability using DeepSeek AI
+///
+/// # Arguments
+/// * `device_info` - Device information string (e.g., "Router TP-Link TL-WR841N, OpenWrt 21.02, IP 192.168.1.1")
+/// * `vuln_id` - Vulnerability identifier (e.g., "CVE-2021-43297")
+/// * `cvss` - CVSS score of the vulnerability
+/// * `api_key` - DeepSeek API key
+///
+/// # Returns
+/// * `Ok(DiagnosisResult)` - AI-generated diagnosis with summary, risk level, immediate actions, and technical details
+/// * `Err(String)` - Error message if the API call fails
+pub async fn diagnose_vulnerability(
+    device_info: &str,
+    vuln_id: &str,
+    cvss: f32,
+    api_key: &str,
+) -> Result<DiagnosisResult, String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    // Build prompt for vulnerability diagnosis
+    let prompt = format!(
+        r#"你是一位网络安全专家。请分析以下漏洞并给出诊断结果。
+
+设备信息: {}
+
+漏洞ID: {}
+CVSS评分: {:.1}
+
+请以JSON格式返回诊断结果，包含以下字段:
+- summary: 简要总结（50字以内）
+- risk_level: 风险等级（低危/中危/高危/严重）
+- immediate_actions: 立即采取的措施列表（3-5条）
+- technical_details: 技术细节和修复建议（100字以内）
+
+直接返回JSON，不要包含markdown代码块标记。"#,
+        device_info, vuln_id, cvss
+    );
+
+    let request_body = serde_json::json!({
+        "model": "deepseek-chat",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 500
+    });
+
+    let response = client
+        .post("https://api.deepseek.com/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| format!("API request failed: {}", e))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("API returned error {}: {}", status, body));
+    }
+
+    let api_response: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse API response: {}", e))?;
+
+    let content = api_response["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or_else(|| "Invalid API response format: missing content".to_string())?;
+
+    // Parse the JSON response from DeepSeek
+    let result: DiagnosisResult = serde_json::from_str(content)
+        .map_err(|e| format!("Failed to parse diagnosis result: {}. Content: {}", e, content))?;
+
+    Ok(result)
 }
 
 #[cfg(test)]

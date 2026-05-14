@@ -35,9 +35,11 @@ pub use attack_chain::{
 pub use diagnosis::{
     DiagnosisReport,
     DiagnosisDevice,
+    DiagnosisResult,
     CriticalIssue,
     MediumIssue,
     diagnose_network,
+    diagnose_vulnerability,
 };
 
 pub use fix_suggest::{
