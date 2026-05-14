@@ -1,6 +1,18 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
+/// Vulnerability for AI attack chain analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Vulnerability {
+    pub ip: String,
+    pub port: Option<u16>,
+    pub vuln_type: String,
+    pub title: String,
+    pub description: String,
+    pub severity: String,
+    pub cvss_score: Option<f64>,
+}
+
 /// Attack chain node
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttackNode {
@@ -249,6 +261,135 @@ pub fn detect_attack_chain(findings: &[super::super::security::report::SecurityR
         }
     }
     false
+}
+
+/// Analyze attack chain using DeepSeek R1 for multi-step reasoning
+///
+/// # Arguments
+/// * `vulns` - List of vulnerabilities to analyze
+/// * `api_key` - DeepSeek API key
+/// * `subnet` - Target subnet for context
+///
+/// # Returns
+/// * `Ok(AttackChain)` - AI-generated attack chain with nodes, edges, overall rating, and fix priority
+/// * `Err(String)` - Error message if analysis fails
+pub async fn analyze_attack_chain(
+    vulns: Vec<Vulnerability>,
+    api_key: &str,
+    subnet: &str,
+) -> Result<AttackChain, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    // Build vulnerability summary for the prompt
+    let vuln_summary: Vec<String> = vulns
+        .iter()
+        .map(|v| {
+            format!(
+                "- {}:{} [{}] {}{}",
+                v.ip,
+                v.port.map_or("*".to_string(), |p| p.to_string()),
+                v.vuln_type,
+                v.title,
+                v.cvss_score.map_or(String::new(), |s| format!(" (CVSS {:.1})", s))
+            )
+        })
+        .collect();
+
+    let prompt = format!(
+        r#"You are a cybersecurity expert analyzing attack chains in network security.
+
+Given the following vulnerabilities found in subnet {}:
+
+{}
+
+Your task:
+1. Identify how these vulnerabilities could form an attack chain
+2. Determine prerequisite relationships between vulnerabilities
+3. Assess the overall risk rating (Critical/High/Medium/Low)
+4. Suggest fix priority to break the attack chain
+
+Output ONLY a valid JSON object with this exact structure (no markdown, no explanation):
+{{
+  "nodes": [
+    {{
+      "id": "unique_node_id",
+      "finding_id": "vulnerability_type",
+      "title": "Node title",
+      "description": "Detailed description",
+      "risk_level": "High",
+      "prerequisites": ["id1", "id2"]
+    }}
+  ],
+  "edges": [
+    {{
+      "from": "node_id_1",
+      "to": "node_id_2",
+      "relationship": "leads_to|enables|escalates_to"
+    }}
+  ],
+  "combined_risk": "Critical|High|Medium|Low",
+  "fix_priority": [
+    {{
+      "finding_id": "vulnerability_type",
+      "title": "Fix title",
+      "action": "Concrete action to take",
+      "effort": "High|Medium|Low"
+    }}
+  ]
+}}
+
+Rules:
+- Use severity from provided CVSS scores when available
+- Maximum 10 nodes in the attack chain
+- Focus on the most critical attack paths
+- Relationship types: "leads_to" (direct progression), "enables" (makes possible), "escalates_to" (privilege escalation)
+- fix_priority should list the most impactful remediation steps in order"#,
+        subnet,
+        vuln_summary.join("\n")
+    );
+
+    let request_body = serde_json::json!({
+        "model": "deepseek-reasoner",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
+    });
+
+    let response = client
+        .post("https://api.deepseek.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to send request: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("DeepSeek API error ({}): {}", status, body));
+    }
+
+    let api_response: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let content = api_response["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or("Invalid API response: missing content")?;
+
+    // Parse the JSON response
+    let chain: AttackChain = serde_json::from_str(content)
+        .map_err(|e| format!("Failed to parse AI response as JSON: {} - Raw: {}", e, content))?;
+
+    Ok(chain)
 }
 
 #[cfg(test)]
