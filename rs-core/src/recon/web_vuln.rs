@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Vulnerability types detected passively
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -10,6 +11,42 @@ pub enum VulnType {
     SensitiveInfoLeak,
     OpenRedirect,
     Ssrf,
+}
+
+/// Web vulnerability finding (blocking version)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebVuln {
+    pub url: String,
+    pub vuln_type: VulnType,
+    pub evidence: String,
+    pub severity: String,
+}
+
+/// Web vulnerability result for async API (uses String for vuln_type)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebVulnResult {
+    pub vuln_type: String,   // sql_injection/xss/path_disclosure/api_key_leak
+    pub url: String,
+    pub evidence: String,
+    pub severity: String,
+}
+
+impl From<WebVuln> for WebVulnResult {
+    fn from(v: WebVuln) -> Self {
+        WebVulnResult {
+            vuln_type: match v.vuln_type {
+                VulnType::SqlInjectionEcho => "sql_injection",
+                VulnType::XssReflection => "xss",
+                VulnType::SensitivePath => "path_disclosure",
+                VulnType::SensitiveInfoLeak => "api_key_leak",
+                VulnType::OpenRedirect => "open_redirect",
+                VulnType::Ssrf => "ssrf",
+            }.to_string(),
+            url: v.url,
+            evidence: v.evidence,
+            severity: v.severity,
+        }
+    }
 }
 
 impl VulnType {
@@ -34,15 +71,6 @@ impl VulnType {
             VulnType::Ssrf => "高危",
         }
     }
-}
-
-/// Web vulnerability finding
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WebVuln {
-    pub url: String,
-    pub vuln_type: VulnType,
-    pub evidence: String,
-    pub severity: String,
 }
 
 /// Test string for XSS reflection detection
@@ -243,7 +271,7 @@ pub fn scan_info_leaks(url: &str, body: &str) -> Vec<WebVuln> {
     vulns
 }
 
-/// Perform complete passive web vulnerability scan
+/// Perform complete passive web vulnerability scan (blocking)
 pub fn passive_web_scan(url: &str) -> Result<Vec<WebVuln>, String> {
     let resp = reqwest::blocking::Client::new()
         .get(url)
@@ -266,6 +294,189 @@ pub fn passive_web_scan(url: &str) -> Result<Vec<WebVuln>, String> {
     }
 
     Ok(all_vulns)
+}
+
+// ============================================================================
+// Async versions for use with tokio/wasm-bindgen-futures
+// ============================================================================
+
+/// Async version: Perform complete passive web vulnerability scan
+pub async fn passive_web_scan_async(url: &str) -> Vec<WebVulnResult> {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let response = match client.get(url).send().await {
+        Ok(resp) => resp,
+        Err(_) => return Vec::new(),
+    };
+
+    let body = match response.text().await {
+        Ok(b) => b,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut results = Vec::new();
+
+    // SQL injection error detection
+    for vuln in detect_sql_errors(url, &body) {
+        results.push(vuln.into());
+    }
+
+    // Sensitive info leaks
+    for vuln in scan_info_leaks(url, &body) {
+        results.push(vuln.into());
+    }
+
+    // XSS reflection (only if URL has query params)
+    if url.contains('?') {
+        for vuln in detect_xss_reflection(url, &body) {
+            results.push(vuln.into());
+        }
+    }
+
+    results
+}
+
+/// Async version: Scan for SQL injection echoes (passive - no exploitation)
+pub async fn scan_sql_injection_async(url: &str) -> Vec<WebVulnResult> {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let response = match client.get(url).send().await {
+        Ok(resp) => resp,
+        Err(_) => return Vec::new(),
+    };
+
+    let body = match response.text().await {
+        Ok(b) => b,
+        Err(_) => return Vec::new(),
+    };
+
+    detect_sql_errors(url, &body)
+        .into_iter()
+        .map(|v| v.into())
+        .collect()
+}
+
+/// Async version: Test XSS reflection by injecting test string
+pub async fn test_xss_reflection_async(url: &str) -> Vec<WebVulnResult> {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let test_url = format!("{}?q={}", url, urlencoding::encode(XSS_TEST_STRING));
+
+    let response = match client.get(&test_url).send().await {
+        Ok(resp) => resp,
+        Err(_) => return Vec::new(),
+    };
+
+    let body = match response.text().await {
+        Ok(b) => b,
+        Err(_) => return Vec::new(),
+    };
+
+    detect_xss_reflection(url, &body)
+        .into_iter()
+        .map(|v| v.into())
+        .collect()
+}
+
+/// Async version: Scan URL for sensitive paths (concurrent requests)
+pub async fn scan_sensitive_paths_async(url: &str) -> Vec<WebVulnResult> {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let base_url = url.split('?').next().unwrap_or(url).trim_end_matches('/');
+
+    // Build list of paths to check concurrently
+    let mut handles = Vec::new();
+    for path in SENSITIVE_PATHS {
+        let check_url = if path.starts_with('/') {
+            format!("{}{}", base_url, path)
+        } else {
+            format!("{}/{}", base_url, path)
+        };
+        let client = client.clone();
+        handles.push(tokio::spawn(async move {
+            match client.get(&check_url).send().await {
+                Ok(resp) => {
+                    let status = resp.status().as_u16();
+                    if status == 200 || status == 401 || status == 403 {
+                        Some((check_url, status))
+                    } else {
+                        None
+                    }
+                }
+                Err(_) => None,
+            }
+        }));
+    }
+
+    let mut results = Vec::new();
+    for handle in handles {
+        if let Ok(Some((check_url, status))) = handle.await {
+            results.push(WebVulnResult {
+                vuln_type: "path_disclosure".to_string(),
+                url: check_url,
+                evidence: format!("敏感路径返回状态码: {}", status),
+                severity: VulnType::SensitivePath.severity().to_string(),
+            });
+        }
+    }
+
+    results
+}
+
+/// Async version: Scan response body for sensitive information leaks
+pub async fn scan_info_leaks_async(url: &str, body: &str) -> Vec<WebVulnResult> {
+    scan_info_leaks(url, body)
+        .into_iter()
+        .map(|v| v.into())
+        .collect()
+}
+
+/// Async version: Batch scan multiple URLs concurrently
+pub async fn passive_web_scan_batch(urls: &[String]) -> HashMap<String, Vec<WebVulnResult>> {
+    let mut handles = Vec::new();
+
+    for url in urls {
+        let url = url.clone();
+        handles.push(tokio::spawn(async move {
+            let vulns = passive_web_scan_async(&url).await;
+            (url, vulns)
+        }));
+    }
+
+    let mut results = HashMap::new();
+    for handle in handles {
+        if let Ok((url, vulns)) = handle.await {
+            if !vulns.is_empty() {
+                results.insert(url, vulns);
+            }
+        }
+    }
+
+    results
 }
 
 #[cfg(test)]
