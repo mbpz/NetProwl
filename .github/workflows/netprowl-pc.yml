@@ -32,13 +32,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+          export HOME=/home/runner
+          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY
           rm -f ~/.npmrc
-          npm config set proxy "" && npm config set https-proxy ""
-          npm install -g npm@9
-          npm config delete proxy && npm config delete https-proxy
+          npm config set proxy "" && npm config set https-proxy "" && npm config set no-proxy ""
+          npm config set registry https://registry.npmjs.org
+          npm config set fetch-timeout 60000
           cd netprowl-pc
-          npm install --registry=https://registry.npmjs.org --no-proxy
+          HOME=/home/runner npm install --registry=https://registry.npmjs.org
 
       - name: Build frontend
         run: cd netprowl-pc && npm run build
@@ -76,10 +77,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
+          export HOME=/Users/runner
+          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY
           rm -f ~/.npmrc ~/.bunrc
-          cd netprowl-pc
-          bun install --registry=https://registry.npmjs.org --no-proxy
+          bun install --registry=https://registry.npmjs.org
 
       - name: Build Tauri app
         run: |
