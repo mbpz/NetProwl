@@ -2,6 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::ToSocketAddrs;
 
+#[cfg(not(target_arch = "wasm32"))]
+use trust_dns_resolver::TokioAsyncResolver;
+#[cfg(not(target_arch = "wasm32"))]
+use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
+
 /// DNS record types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
@@ -95,41 +100,49 @@ impl CdnProvider {
 }
 
 
-/// Resolve domain using system DNS resolver
-pub fn resolve_domain(domain: &str) -> Result<HashMap<DnsRecordType, Vec<DnsValue>>, String> {
+/// Resolve domain using system DNS resolver (async)
+pub async fn resolve_domain_async(domain: &str) -> Result<HashMap<DnsRecordType, Vec<DnsValue>>, String> {
     let mut records = HashMap::new();
 
-    // Query A record
+    // Query A record (sync using std library)
     if let Ok(ips) = resolve_a(domain) {
         records.insert(DnsRecordType::A, ips);
     }
 
-    // Query AAAA record
+    // Query AAAA record (sync using std library)
     if let Ok(ips) = resolve_aaaa(domain) {
         records.insert(DnsRecordType::Aaaa, ips);
     }
 
     // Query CNAME record
-    if let Ok(cnames) = resolve_cname(domain) {
+    if let Ok(cnames) = resolve_cname(domain).await {
         records.insert(DnsRecordType::Cname, cnames);
     }
 
     // Query MX record
-    if let Ok(mx) = resolve_mx(domain) {
+    if let Ok(mx) = resolve_mx(domain).await {
         records.insert(DnsRecordType::Mx, mx);
     }
 
     // Query TXT record
-    if let Ok(txt) = resolve_txt(domain) {
+    if let Ok(txt) = resolve_txt(domain).await {
         records.insert(DnsRecordType::Txt, txt);
     }
 
     // Query NS record
-    if let Ok(ns) = resolve_ns(domain) {
+    if let Ok(ns) = resolve_ns(domain).await {
         records.insert(DnsRecordType::Ns, ns);
     }
 
     Ok(records)
+}
+
+/// Resolve domain using system DNS resolver (sync wrapper)
+#[allow(dead_code)]
+pub fn resolve_domain(domain: &str) -> Result<HashMap<DnsRecordType, Vec<DnsValue>>, String> {
+    tokio::runtime::Runtime::new()
+        .map_err(|e| format!("Failed to create runtime: {}", e))?
+        .block_on(resolve_domain_async(domain))
 }
 
 /// Query A record using standard library
@@ -168,32 +181,120 @@ fn resolve_aaaa(domain: &str) -> Result<Vec<DnsValue>, String> {
     Ok(values)
 }
 
-/// Query CNAME record (stub - requires trust-dns-resolver for full implementation)
+/// Query CNAME record using trust-dns-resolver
 #[allow(dead_code)]
-fn resolve_cname(domain: &str) -> Result<Vec<DnsValue>, String> {
-    let _ = domain;
-    Ok(Vec::new())
+pub async fn resolve_cname(domain: &str) -> Result<Vec<DnsValue>, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let resolver = TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default());
+
+        let name: trust_dns_resolver::Name = domain.parse()
+            .map_err(|e| format!("Invalid domain name '{}': {}", domain, e))?;
+
+        match resolver.lookup(name, trust_dns_resolver::proto::rr::RecordType::CNAME).await {
+            Ok(lookup) => {
+                let values: Vec<DnsValue> = lookup.iter()
+                    .map(|rdata: &trust_dns_resolver::proto::rr::RData| DnsValue {
+                        value: rdata.to_string(),
+                        ttl: None,
+                    })
+                    .collect();
+                Ok(values)
+            }
+            Err(e) => Err(format!("CNAME lookup failed: {}", e)),
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        Err("CNAME resolution not supported in WASM".to_string())
+    }
 }
 
-/// Query MX record (stub - requires trust-dns-resolver for full implementation)
+/// Query MX record using trust-dns-resolver
 #[allow(dead_code)]
-fn resolve_mx(domain: &str) -> Result<Vec<DnsValue>, String> {
-    let _ = domain;
-    Ok(Vec::new())
+pub async fn resolve_mx(domain: &str) -> Result<Vec<DnsValue>, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let resolver = TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default());
+
+        let name: trust_dns_resolver::Name = domain.parse()
+            .map_err(|e| format!("Invalid domain name '{}': {}", domain, e))?;
+
+        match resolver.lookup(name, trust_dns_resolver::proto::rr::RecordType::MX).await {
+            Ok(lookup) => {
+                let values: Vec<DnsValue> = lookup.iter()
+                    .map(|rdata: &trust_dns_resolver::proto::rr::RData| DnsValue {
+                        value: rdata.to_string(),
+                        ttl: None,
+                    })
+                    .collect();
+                Ok(values)
+            }
+            Err(e) => Err(format!("MX lookup failed: {}", e)),
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        Err("MX resolution not supported in WASM".to_string())
+    }
 }
 
-/// Query TXT record (stub - requires trust-dns-resolver for full implementation)
+/// Query TXT record using trust-dns-resolver
 #[allow(dead_code)]
-fn resolve_txt(domain: &str) -> Result<Vec<DnsValue>, String> {
-    let _ = domain;
-    Ok(Vec::new())
+pub async fn resolve_txt(domain: &str) -> Result<Vec<DnsValue>, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let resolver = TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default());
+
+        let name: trust_dns_resolver::Name = domain.parse()
+            .map_err(|e| format!("Invalid domain name '{}': {}", domain, e))?;
+
+        match resolver.lookup(name, trust_dns_resolver::proto::rr::RecordType::TXT).await {
+            Ok(lookup) => {
+                let values: Vec<DnsValue> = lookup.iter()
+                    .map(|rdata: &trust_dns_resolver::proto::rr::RData| DnsValue {
+                        value: rdata.to_string(),
+                        ttl: None,
+                    })
+                    .collect();
+                Ok(values)
+            }
+            Err(e) => Err(format!("TXT lookup failed: {}", e)),
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        Err("TXT resolution not supported in WASM".to_string())
+    }
 }
 
-/// Query NS record (stub - requires trust-dns-resolver for full implementation)
+/// Query NS record using trust-dns-resolver
 #[allow(dead_code)]
-fn resolve_ns(domain: &str) -> Result<Vec<DnsValue>, String> {
-    let _ = domain;
-    Ok(Vec::new())
+pub async fn resolve_ns(domain: &str) -> Result<Vec<DnsValue>, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let resolver = TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default());
+
+        let name: trust_dns_resolver::Name = domain.parse()
+            .map_err(|e| format!("Invalid domain name '{}': {}", domain, e))?;
+
+        match resolver.lookup(name, trust_dns_resolver::proto::rr::RecordType::NS).await {
+            Ok(lookup) => {
+                let values: Vec<DnsValue> = lookup.iter()
+                    .map(|rdata: &trust_dns_resolver::proto::rr::RData| DnsValue {
+                        value: rdata.to_string(),
+                        ttl: None,
+                    })
+                    .collect();
+                Ok(values)
+            }
+            Err(e) => Err(format!("NS lookup failed: {}", e)),
+        }
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        Err("NS resolution not supported in WASM".to_string())
+    }
 }
 
 /// Query Certificate Transparency (crtsh) for subdomains
