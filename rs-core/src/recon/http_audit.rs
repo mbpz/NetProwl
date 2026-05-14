@@ -1,6 +1,19 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// HTTP header audit result for async operations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HTTPHeaderResult {
+    pub strict_transport_security: Option<bool>,
+    pub content_security_policy: Option<bool>,
+    pub x_frame_options: Option<String>,
+    pub content_type_options: Option<bool>,
+    pub referrer_policy: Option<String>,
+    pub permissions_policy: Option<bool>,
+    pub score: u8,
+    pub recommendations: Vec<String>,
+}
+
 /// HTTP security header audit report
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HttpSecurityReport {
@@ -52,6 +65,141 @@ pub fn audit_http_security(url: &str) -> Result<HttpSecurityReport, String> {
 
     let report = analyze_security_headers(url, headers);
     Ok(report)
+}
+
+/// Async version: Fetch URL and analyze HTTP security headers
+pub async fn audit_http_headers(url: &str) -> Result<HTTPHeaderResult, String> {
+    let resp = reqwest::Client::new()
+        .get(url)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch URL: {}", e))?;
+
+    let headers: HashMap<String, String> = resp.headers()
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+        .collect();
+
+    let result = analyze_http_headers_async(url, headers);
+    Ok(result)
+}
+
+/// Analyze security headers for async result
+fn analyze_http_headers_async(_url: &str, headers: HashMap<String, String>) -> HTTPHeaderResult {
+    let mut recommendations = Vec::new();
+    let mut score: i32 = 100;
+
+    // HSTS: 20 points
+    let hsts_header = SecurityHeader::StrictTransportSecurity.name();
+    let strict_transport_security = if let Some(value) = headers.get(hsts_header) {
+        let max_age_ok = extract_max_age(value)
+            .map(|ma| ma >= 31536000)
+            .unwrap_or(false);
+        let include_subdomains = value.contains("includeSubDomains");
+        if !max_age_ok || !include_subdomains {
+            score -= 20;
+            recommendations.push(format!(
+                "将 {} 设置为 max-age=31536000; includeSubDomains",
+                hsts_header
+            ));
+        }
+        Some(max_age_ok && include_subdomains)
+    } else {
+        score -= 20;
+        recommendations.push(format!("添加 {} 头", hsts_header));
+        None
+    };
+
+    // CSP: 20 points
+    let csp_header = SecurityHeader::ContentSecurityPolicy.name();
+    let content_security_policy = if let Some(value) = headers.get(csp_header) {
+        let safe = !value.contains("unsafe-inline") && !value.contains("unsafe-eval");
+        if !safe {
+            score -= 20;
+            recommendations.push("从 Content-Security-Policy 中移除 unsafe-inline 和 unsafe-eval".to_string());
+        }
+        Some(safe)
+    } else {
+        score -= 20;
+        recommendations.push(format!("添加 {} 头限制脚本来源和内联脚本", csp_header));
+        None
+    };
+
+    // X-Frame-Options: 15 points
+    let xfo_header = SecurityHeader::XFrameOptions.name();
+    let x_frame_options = if let Some(value) = headers.get(xfo_header) {
+        let valid = value == "DENY" || value == "SAMEORIGIN";
+        if !valid {
+            score -= 15;
+            recommendations.push(format!("设置 {} 为 DENY 或 SAMEORIGIN", xfo_header));
+        }
+        Some(value.clone())
+    } else {
+        score -= 15;
+        recommendations.push("添加 X-Frame-Options: DENY 或 SAMEORIGIN 防止点击劫持".to_string());
+        None
+    };
+
+    // X-Content-Type-Options: 10 points
+    let xcto_header = SecurityHeader::XContentTypeOptions.name();
+    let content_type_options = if let Some(value) = headers.get(xcto_header) {
+        let valid = value == "nosniff";
+        if !valid {
+            score -= 10;
+            recommendations.push(format!("设置 {} 为 nosniff", xcto_header));
+        }
+        Some(valid)
+    } else {
+        score -= 10;
+        recommendations.push("添加 X-Content-Type-Options: nosniff".to_string());
+        None
+    };
+
+    // Referrer-Policy: 15 points
+    let rp_header = SecurityHeader::ReferrerPolicy.name();
+    let referrer_policy = if let Some(value) = headers.get(rp_header) {
+        let valid_values = [
+            "no-referrer",
+            "no-referrer-when-downgrade",
+            "origin",
+            "origin-when-cross-origin",
+            "same-origin",
+            "strict-origin",
+            "strict-origin-when-cross-origin",
+        ];
+        let valid = valid_values.contains(&value.as_str());
+        if !valid {
+            score -= 15;
+            recommendations.push(format!("设置 {} 为有效的 Referrer-Policy 值", rp_header));
+        }
+        Some(value.clone())
+    } else {
+        score -= 15;
+        recommendations.push("添加 Referrer-Policy 保护敏感URL".to_string());
+        None
+    };
+
+    // Permissions-Policy: 20 points
+    let pp_header = SecurityHeader::PermissionsPolicy.name();
+    let permissions_policy = if headers.get(pp_header).is_some() {
+        Some(true)
+    } else {
+        score -= 20;
+        recommendations.push("添加 Permissions-Policy 头限制浏览器功能".to_string());
+        None
+    };
+
+    HTTPHeaderResult {
+        strict_transport_security,
+        content_security_policy,
+        x_frame_options,
+        content_type_options,
+        referrer_policy,
+        permissions_policy,
+        score: score.max(0).min(100) as u8,
+        recommendations,
+    }
 }
 
 /// Analyze security headers without fetching (for when we already have headers)
