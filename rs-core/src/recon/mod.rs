@@ -65,15 +65,17 @@ pub use web_vuln::{
 
 pub use threat_intel::{
     ThreatIntel,
+    ThreatIntelResult,
     ThreatReport,
     DeviceFingerprintRule,
+    check_threat_intel,
+    check_threat_intel_sync,
     is_ip_blocked,
     is_scanner_ip,
     is_exposed_internal,
     match_community_rules,
     add_threat_report,
     get_user_reports,
-    check_threat_intel,
 };
 
 use serde::{Deserialize, Serialize};
@@ -108,7 +110,7 @@ pub fn run_recon(target: &str) -> ReconSummary {
     };
 
     // Check threat intel first
-    summary.threat_intel = check_threat_intel(target);
+    summary.threat_intel = check_threat_intel_sync(target);
 
     // DNS reconnaissance for domains
     if !target.parse::<std::net::IpAddr>().is_ok() {

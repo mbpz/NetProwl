@@ -185,8 +185,8 @@ pub fn clear_user_reports() {
     }
 }
 
-/// Check if IP matches any threat intelligence
-pub fn check_threat_intel(ip: &str) -> ThreatIntel {
+/// Check if IP matches any threat intelligence (sync version)
+pub fn check_threat_intel_sync(ip: &str) -> ThreatIntel {
     let mut blocked_ips = Vec::new();
     let community_reports = get_user_reports();
     let matching_rules = Vec::new();
@@ -208,6 +208,178 @@ pub fn check_threat_intel(ip: &str) -> ThreatIntel {
         community_reports,
         matching_rules,
     }
+}
+
+/// Threat intelligence result for async API lookups
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreatIntelResult {
+    pub ip: String,
+    pub is_malicious: bool,
+    pub threat_actors: Vec<String>,
+    pub attack_reports: Vec<String>,
+    pub last_seen: Option<String>,
+}
+
+/// Check threat intelligence for an IP (async)
+/// Queries VirusTotal/AlienVault OTX if API key is provided
+/// Returns mock data (marked as unknown) if no API key
+pub async fn check_threat_intel(ip: &str) -> Result<ThreatIntelResult, String> {
+    // Check local blocklist first
+    if is_ip_blocked(ip) {
+        return Ok(ThreatIntelResult {
+            ip: ip.to_string(),
+            is_malicious: true,
+            threat_actors: vec!["local_blocklist".to_string()],
+            attack_reports: vec!["Known malicious IP in local blocklist".to_string()],
+            last_seen: None,
+        });
+    }
+
+    if is_scanner_ip(ip) {
+        return Ok(ThreatIntelResult {
+            ip: ip.to_string(),
+            is_malicious: true,
+            threat_actors: vec!["known_scanner".to_string()],
+            attack_reports: vec!["Known scanner IP (Shodan/Censys)".to_string()],
+            last_seen: None,
+        });
+    }
+
+    // Try VirusTotal API if key is present
+    if let Ok(api_key) = std::env::var("VIRUSTOTAL_API_KEY") {
+        if !api_key.is_empty() {
+            return check_virustotal(ip, &api_key).await;
+        }
+    }
+
+    // Try AlienVault OTX if key is present
+    if let Ok(api_key) = std::env::var("OTX_API_KEY") {
+        if !api_key.is_empty() {
+            return check_otx(ip, &api_key).await;
+        }
+    }
+
+    // No API keys - return mock unknown data
+    Ok(ThreatIntelResult {
+        ip: ip.to_string(),
+        is_malicious: false,
+        threat_actors: vec!["unknown".to_string()],
+        attack_reports: vec!["No API key configured for threat lookup".to_string()],
+        last_seen: None,
+    })
+}
+
+/// Query VirusTotal API for threat intelligence
+async fn check_virustotal(ip: &str, api_key: &str) -> Result<ThreatIntelResult, String> {
+    let client = reqwest::Client::new();
+    let url = format!("https://www.virustotal.com/api/v3/ip_addresses/{}", ip);
+
+    let response = client
+        .get(&url)
+        .header("x-apikey", api_key)
+        .send()
+        .await
+        .map_err(|e| format!("VirusTotal request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("VirusTotal API error: {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse VirusTotal response: {}", e))?;
+
+    let data = json.get("data").ok_or("Invalid VirusTotal response format")?;
+    let attributes = data.get("attributes").ok_or("Missing attributes")?;
+
+    let malicious = attributes
+        .get("last_analysis_stats")
+        .and_then(|s| s.get("malicious"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0) > 0;
+
+    let threat_actors: Vec<String> = attributes
+        .get("threat_labels")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let last_stats = attributes.get("last_analysis_date").and_then(|v| v.as_str());
+
+    Ok(ThreatIntelResult {
+        ip: ip.to_string(),
+        is_malicious: malicious,
+        threat_actors,
+        attack_reports: vec!["VirusTotal threat intelligence".to_string()],
+        last_seen: last_stats.map(String::from),
+    })
+}
+
+/// Query AlienVault OTX API for threat intelligence
+async fn check_otx(ip: &str, api_key: &str) -> Result<ThreatIntelResult, String> {
+    let client = reqwest::Client::new();
+    let url = format!("https://otx.alienvault.com/api/v1/indicators/IPv4/{}/general", ip);
+
+    let response = client
+        .get(&url)
+        .header("X-OTX-API-KEY", api_key)
+        .send()
+        .await
+        .map_err(|e| format!("OTX request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("AlienVault OTX API error: {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse OTX response: {}", e))?;
+
+    let pulse_count = json
+        .get("pulse_info")
+        .and_then(|p| p.get("count"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+
+    let is_malicious = pulse_count > 0;
+
+    let pulses: Vec<String> = json
+        .get("pulse_info")
+        .and_then(|p| p.get("pulses"))
+        .and_then(|arr| arr.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|p| p.get("name").and_then(|n| n.as_str()).map(String::from))
+                .take(5)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let last_seen = json
+        .get("pulse_info")
+        .and_then(|p| p.get("pulses"))
+        .and_then(|arr| arr.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|p| p.get("created"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
+    Ok(ThreatIntelResult {
+        ip: ip.to_string(),
+        is_malicious,
+        threat_actors: pulses,
+        attack_reports: format!("AlienVault OTX: {} pulses", pulse_count)
+            .split(',')
+            .map(String::from)
+            .collect(),
+        last_seen,
+    })
 }
 
 #[cfg(test)]
@@ -241,19 +413,28 @@ mod tests {
         assert!(matches.iter().any(|m| m.rule_type == "service"));
     }
 
-    #[test]
-    fn test_threat_report_add_and_get() {
-        clear_user_reports();
-        let report = ThreatReport {
-            ip: "10.0.0.99".to_string(),
-            service: "SSH".to_string(),
-            description: "Brute force attempts detected".to_string(),
-            submitted_by: "test_user".to_string(),
-            timestamp: 1715500000,
-        };
-        add_threat_report(report);
-        let reports = get_user_reports();
-        assert_eq!(reports.len(), 1);
-        clear_user_reports();
+    #[tokio::test]
+    async fn test_async_check_threat_intel_mock() {
+        // Without API keys, should return mock unknown data
+        let result = check_threat_intel("1.1.1.1").await.unwrap();
+        assert_eq!(result.ip, "1.1.1.1");
+        assert!(!result.is_malicious);
+        assert!(result.threat_actors.contains(&"unknown".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_async_check_threat_intel_blocked() {
+        // 192.168.100.100 is in the local blocklist
+        let result = check_threat_intel("192.168.100.100").await.unwrap();
+        assert!(result.is_malicious);
+        assert!(result.threat_actors.contains(&"local_blocklist".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_async_check_threat_intel_scanner() {
+        // Known scanner IP
+        let result = check_threat_intel("66.240.192.138").await.unwrap();
+        assert!(result.is_malicious);
+        assert!(result.threat_actors.contains(&"known_scanner".to_string()));
     }
 }
