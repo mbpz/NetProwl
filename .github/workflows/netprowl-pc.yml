@@ -34,11 +34,11 @@ jobs:
         run: |
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
           rm -f ~/.npmrc
+          npm config set proxy "" && npm config set https-proxy ""
           npm install -g npm@9
-          npm config delete proxy
-          npm config delete https-proxy
+          npm config delete proxy && npm config delete https-proxy
           cd netprowl-pc
-          npm install --registry=https://registry.npmjs.org
+          npm install --registry=https://registry.npmjs.org --no-proxy
 
       - name: Build frontend
         run: cd netprowl-pc && npm run build
@@ -79,7 +79,7 @@ jobs:
           unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
           rm -f ~/.npmrc ~/.bunrc
           cd netprowl-pc
-          bun install --registry=https://registry.npmjs.org
+          bun install --registry=https://registry.npmjs.org --no-proxy
 
       - name: Build Tauri app
         run: |
