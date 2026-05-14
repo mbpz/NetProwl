@@ -93,6 +93,9 @@ pub use firmware::{
 
 pub use report::{
     SecurityReport,
+    DeviceReport,
+    VulnSummary,
+    DetailedSecurityReport,
     SecurityRisk,
     SecurityScanSummary,
     CvssScore,
@@ -105,6 +108,7 @@ pub use report::{
     generate_fix_priority,
     generate_recommendations,
     generate_security_report,
+    generate_report,
 };
 
 /// Run a complete security scan on a target
@@ -113,7 +117,7 @@ pub async fn run_security_scan(
     ip: &str,
     open_ports: &[(u16, &str)], // (port, service_name)
     _timeout_ms: u64,
-) -> Result<SecurityReport, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<DetailedSecurityReport, Box<dyn std::error::Error + Send + Sync>> {
     use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::time::{sleep, Duration};
 

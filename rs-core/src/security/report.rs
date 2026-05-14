@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::UNIX_EPOCH;
 
+use crate::ai::attack_chain::Vulnerability;
+use crate::types::Device;
+
 use super::credentials::{WeakCredential, CredentialRiskLevel};
 use super::http_auth::{HttpAuthResult, RiskLevel as HttpAuthRiskLevel};
 use super::tls_audit::{TlsReport, RiskLevel as TlsRiskLevel};
@@ -142,15 +145,50 @@ pub struct SecurityScanSummary {
     pub scan_timestamp: u64,
 }
 
-/// Complete security report
+/// Vulnerability summary for device report
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecurityReport {
+pub struct VulnSummary {
+    pub vuln_type: String,
+    pub title: String,
+    pub severity: String,
+    pub cvss_score: Option<f64>,
+    pub description: String,
+}
+
+/// Device report for executive summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceReport {
+    pub ip: String,
+    pub mac: Option<String>,
+    pub vendor: Option<String>,
+    pub os: Option<String>,
+    pub open_ports: Vec<u16>,
+    pub vulnerabilities: Vec<VulnSummary>,
+}
+
+/// Detailed security report (original format for technical users)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DetailedSecurityReport {
     pub summary: SecurityScanSummary,
     pub risks: Vec<SecurityRisk>,
     pub cvss_score: Option<f64>,
     pub risk_distribution: RiskDistribution,
     pub fix_priority: Vec<FixPriority>,
     pub recommendations: Vec<String>,
+}
+
+/// Executive security report (new format for management)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SecurityReport {
+    pub title: String,
+    pub generated_at: String,
+    pub target_network: String,
+    pub executive_summary: String,
+    pub device_count: usize,
+    pub vuln_count: usize,
+    pub critical_count: usize,
+    pub high_count: usize,
+    pub devices: Vec<DeviceReport>,
 }
 
 /// Convert RiskLevel to numeric score (simplified)
@@ -589,7 +627,7 @@ pub fn generate_recommendations(risks: &[SecurityRisk]) -> Vec<String> {
     recs
 }
 
-/// Generate complete security report
+/// Generate complete security report (technical format)
 pub fn generate_security_report(
     targets_scanned: usize,
     duration_seconds: u64,
@@ -598,7 +636,7 @@ pub fn generate_security_report(
     tls_reports: Vec<TlsReport>,
     unauthorized_endpoints: Vec<UnauthorizedEndpoint>,
     firmware_risks: Vec<FirmwareRisk>,
-) -> SecurityReport {
+) -> DetailedSecurityReport {
     let mut all_risks: Vec<SecurityRisk> = Vec::new();
 
     // Convert all findings to security risks
@@ -636,7 +674,7 @@ pub fn generate_security_report(
     let fix_priority = generate_fix_priority(&all_risks);
     let recommendations = generate_recommendations(&all_risks);
 
-    SecurityReport {
+    DetailedSecurityReport {
         summary,
         risks: all_risks,
         cvss_score,
@@ -644,6 +682,248 @@ pub fn generate_security_report(
         fix_priority,
         recommendations,
     }
+}
+
+/// Generate AI-powered executive summary using DeepSeek
+async fn generate_ai_summary(
+    device_count: usize,
+    vuln_count: usize,
+    critical_count: usize,
+    high_count: usize,
+    devices_data: &str,
+    api_key: &str,
+) -> Result<String, String> {
+    let client = reqwest::Client::new();
+
+    let prompt = format!(
+        r#"You are a cybersecurity expert preparing an executive summary for a network security report.
+
+## Report Summary
+- Devices scanned: {}
+- Total vulnerabilities found: {}
+- Critical severity: {}
+- High severity: {}
+
+## Device Details
+{}
+
+## Task
+Provide a concise executive summary (2-3 paragraphs) that:
+1. Gives management an overview of the network security posture
+2. Highlights the most critical risks requiring immediate attention
+3. Provides actionable recommendations in plain language
+
+Keep it professional, clear, and suitable for non-technical stakeholders.
+Output ONLY the summary text, no headers or formatting markers."#,
+        device_count,
+        vuln_count,
+        critical_count,
+        high_count,
+        devices_data
+    );
+
+    let request_body = serde_json::json!({
+        "model": "deepseek-chat",
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.3,
+        "max_tokens": 500
+    });
+
+    let response = client
+        .post("https://api.deepseek.com/v1/chat/completions")
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to send request: {}", e))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("DeepSeek API error ({}): {}", status, body));
+    }
+
+    let api_response: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let content = api_response["choices"][0]["message"]["content"]
+        .as_str()
+        .ok_or("Invalid API response: missing content")?;
+
+    Ok(content.trim().to_string())
+}
+
+/// Generate human-readable fallback summary without AI
+fn generate_fallback_summary(
+    device_count: usize,
+    vuln_count: usize,
+    critical_count: usize,
+    high_count: usize,
+) -> String {
+    if vuln_count == 0 {
+        return format!(
+            "Network security scan completed successfully. {} devices scanned with no vulnerabilities detected. \
+             The network appears to be in good security posture.",
+            device_count
+        );
+    }
+
+    let mut summary = format!(
+        "Network security scan identified {} vulnerabilities across {} devices. ",
+        vuln_count, device_count
+    );
+
+    if critical_count > 0 {
+        summary.push_str(&format!(
+            "{} CRITICAL severity issues require immediate attention. ",
+            critical_count
+        ));
+    }
+
+    if high_count > 0 {
+        summary.push_str(&format!(
+            "{} HIGH severity issues should be addressed soon. ",
+            high_count
+        ));
+    }
+
+    summary.push_str("Please review the detailed technical report for complete findings and remediation steps.");
+
+    summary
+}
+
+/// Generate device report data as JSON string for AI processing
+fn build_devices_data(devices: &[Device], vulns: &[Vulnerability]) -> String {
+    let mut data = String::new();
+
+    for device in devices {
+        let device_vulns: Vec<&Vulnerability> = vulns
+            .iter()
+            .filter(|v| v.ip == device.ip)
+            .collect();
+
+        let vuln_summary = if device_vulns.is_empty() {
+            "No vulnerabilities".to_string()
+        } else {
+            device_vulns
+                .iter()
+                .map(|v| format!("{} ({}: {})", v.title, v.severity, v.cvss_score.unwrap_or(0.0)))
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
+
+        data.push_str(&format!(
+            "- IP: {}, MAC: {:?}, Vendor: {:?}, OS: {:?}\n  Ports: {:?}\n  Vulnerabilities: {}\n",
+            device.ip,
+            device.mac,
+            device.vendor,
+            device.os,
+            device.open_ports.iter().map(|p| p.port).collect::<Vec<_>>(),
+            vuln_summary
+        ));
+    }
+
+    data
+}
+
+/// Generate a two-level security report (executive + technical)
+///
+/// # Arguments
+/// * `devices` - List of discovered devices
+/// * `vulns` - List of vulnerabilities found
+/// * `api_key` - Optional DeepSeek API key for AI-generated summary
+///
+/// # Returns
+/// * `Ok(SecurityReport)` - Complete security report with executive summary
+/// * `Err(String)` - Error message if report generation fails
+pub async fn generate_report(
+    devices: Vec<Device>,
+    vulns: Vec<Vulnerability>,
+    api_key: Option<&str>,
+) -> Result<SecurityReport, String> {
+    let device_count = devices.len();
+    let vuln_count = vulns.len();
+
+    // Count severity levels
+    let critical_count = vulns
+        .iter()
+        .filter(|v| v.severity.eq_ignore_ascii_case("critical"))
+        .count();
+    let high_count = vulns
+        .iter()
+        .filter(|v| v.severity.eq_ignore_ascii_case("high"))
+        .count();
+
+    // Build device reports
+    let mut device_reports: Vec<DeviceReport> = Vec::new();
+
+    for device in &devices {
+        let device_vulns: Vec<VulnSummary> = vulns
+            .iter()
+            .filter(|v| v.ip == device.ip)
+            .map(|v| VulnSummary {
+                vuln_type: v.vuln_type.clone(),
+                title: v.title.clone(),
+                severity: v.severity.clone(),
+                cvss_score: v.cvss_score,
+                description: v.description.clone(),
+            })
+            .collect();
+
+        let open_ports: Vec<u16> = device.open_ports.iter().map(|p| p.port).collect();
+
+        device_reports.push(DeviceReport {
+            ip: device.ip.clone(),
+            mac: device.mac.clone(),
+            vendor: device.vendor.clone(),
+            os: Some(format!("{:?}", device.os)),
+            open_ports,
+            vulnerabilities: device_vulns,
+        });
+    }
+
+    // Generate executive summary (AI or fallback)
+    let devices_data = build_devices_data(&devices, &vulns);
+    let executive_summary = if let Some(key) = api_key {
+        match generate_ai_summary(device_count, vuln_count, critical_count, high_count, &devices_data, key).await {
+            Ok(summary) => summary,
+            Err(e) => {
+                eprintln!("AI summary generation failed, using fallback: {}", e);
+                generate_fallback_summary(device_count, vuln_count, critical_count, high_count)
+            }
+        }
+    } else {
+        generate_fallback_summary(device_count, vuln_count, critical_count, high_count)
+    };
+
+    // Generate timestamp
+    let generated_at = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string();
+
+    // Determine target network from first device or use default
+    let target_network = devices
+        .first()
+        .map(|d| d.ip.clone())
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    Ok(SecurityReport {
+        title: "Network Security Assessment Report".to_string(),
+        generated_at,
+        target_network,
+        executive_summary,
+        device_count,
+        vuln_count,
+        critical_count,
+        high_count,
+        devices: device_reports,
+    })
 }
 
 #[cfg(test)]
@@ -766,7 +1046,7 @@ mod tests {
 
     #[test]
     fn test_security_report_serialization() {
-        let report = SecurityReport {
+        let report = DetailedSecurityReport {
             summary: SecurityScanSummary {
                 targets_scanned: 5,
                 duration_seconds: 30,
