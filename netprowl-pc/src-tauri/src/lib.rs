@@ -7,6 +7,9 @@ mod report;
 mod scanner;
 mod tls;
 mod tool_commands;
+mod ai_commands;
+mod recon_commands;
+mod report_commands;
 
 pub use scanner::{Device, FULL_PORTS, WHITE_PORTS};
 pub use scanner::ip::expand_subnet;
@@ -248,6 +251,27 @@ pub fn run() {
             delete_scan_session,
             clear_scan_history,
             cleanup_scan_history,
+            // AI commands (Phase 2)
+            ai_commands::ai_diagnose_network,
+            ai_commands::ai_build_attack_chain,
+            ai_commands::ai_detect_attack_chain,
+            ai_commands::ai_generate_fix,
+            ai_commands::ai_diagnose_vulnerability,
+            // Recon commands (Phase 4)
+            recon_commands::recon_query_shodan,
+            recon_commands::recon_query_fofa,
+            recon_commands::recon_dns_recon,
+            recon_commands::recon_enum_subdomains,
+            recon_commands::recon_http_audit,
+            recon_commands::recon_detect_waf_cdn,
+            recon_commands::recon_passive_web_scan,
+            recon_commands::recon_check_threat_intel,
+            recon_commands::recon_is_ip_blocked,
+            recon_commands::recon_is_exposed_internal,
+            recon_commands::recon_full,
+            // Report commands (Phase 3)
+            report_commands::report_risk_summary,
+            report_commands::report_fix_priorities,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

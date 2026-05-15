@@ -113,3 +113,73 @@ pub fn guess_service(port: u16) -> String {
 pub fn init() {
     console_error_panic_hook::set_once();
 }
+
+// ── Phase 2+ AI WASM bindings ──
+
+/// Generate Chinese natural language network diagnosis report (WASM)
+/// Input: JSON string with { devices: [...], findings: [...] }
+/// Output: JSON string of DiagnosisReport
+#[wasm_bindgen]
+pub fn wasm_diagnose_network(input_json: &str) -> String {
+    #[derive(serde::Deserialize)]
+    struct Input {
+        devices: Vec<crate::ai::diagnosis::DiagnosisDevice>,
+        findings: Vec<crate::security::report::SecurityRisk>,
+    }
+    match serde_json::from_str::<Input>(input_json) {
+        Ok(input) => {
+            let report = crate::ai::diagnosis::diagnose_network(input.devices, input.findings);
+            serde_json::to_string(&report).unwrap_or_else(|_| "{}".to_string())
+        }
+        Err(e) => format!(r#"{{"error":"{}"}}"#, e),
+    }
+}
+
+/// Generate fix suggestion for a security finding (WASM)
+/// Input: JSON string of SecurityRisk
+/// Output: JSON string of FixSuggestion
+#[wasm_bindgen]
+pub fn wasm_generate_fix(risk_json: &str) -> String {
+    match serde_json::from_str::<crate::security::report::SecurityRisk>(risk_json) {
+        Ok(risk) => {
+            let fix = crate::ai::fix_suggest::generate_fix_suggestion(&risk, None);
+            serde_json::to_string(&fix).unwrap_or_else(|_| "{}".to_string())
+        }
+        Err(e) => format!(r#"{{"error":"{}"}}"#, e),
+    }
+}
+
+/// Build attack chain from security findings (WASM)
+/// Input: JSON string of Vec<SecurityRisk>
+/// Output: JSON string of AttackChain
+#[wasm_bindgen]
+pub fn wasm_build_attack_chain(findings_json: &str) -> String {
+    match serde_json::from_str::<Vec<crate::security::report::SecurityRisk>>(findings_json) {
+        Ok(findings) => {
+            let chain = crate::ai::attack_chain::build_attack_chain(findings);
+            serde_json::to_string(&chain).unwrap_or_else(|_| "{}".to_string())
+        }
+        Err(e) => format!(r#"{{"error":"{}"}}"#, e),
+    }
+}
+
+/// Check if attack chain exists from security findings (WASM)
+#[wasm_bindgen]
+pub fn wasm_detect_attack_chain(findings_json: &str) -> bool {
+    match serde_json::from_str::<Vec<crate::security::report::SecurityRisk>>(findings_json) {
+        Ok(findings) => crate::ai::attack_chain::detect_attack_chain(&findings),
+        Err(_) => false,
+    }
+}
+
+/// Calculate risk distribution from findings (WASM)
+#[wasm_bindgen]
+pub fn wasm_risk_distribution(findings_json: &str) -> String {
+    match serde_json::from_str::<Vec<crate::security::report::SecurityRisk>>(findings_json) {
+        Ok(findings) => {
+            let dist = crate::security::report::calculate_risk_distribution(&findings);
+            serde_json::to_string(&dist).unwrap_or_else(|_| "{}".to_string())
+        }
+        Err(e) => format!(r#"{{"error":"{}"}}"#, e),
+    }
+}

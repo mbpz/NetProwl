@@ -20,6 +20,7 @@ local-ip-address = "0.6"
 
 # Rust Core
 netprowl-core = { path = "../../core" }
+rs-core = { path = "../../rs-core" }
 
 # 并发限流
 governor = "0.7"
