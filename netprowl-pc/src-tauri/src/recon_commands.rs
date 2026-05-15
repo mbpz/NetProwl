@@ -114,6 +114,9 @@ pub struct CombinedReconResult {
     pub http_security: Option<rs_core::recon::http_audit::HttpSecurityReport>,
     pub public_asset: Option<rs_core::recon::shodan::PublicAsset>,
     pub threat_intel: Option<rs_core::recon::threat_intel::ThreatIntelResult>,
+    /// Non-fatal errors from individual steps (step_name → error_message)
+    #[serde(default)]
+    pub errors: Vec<String>,
 }
 
 /// Run full reconnaissance on a target (DNS + subdomains + HTTP + threat intel)
@@ -126,6 +129,7 @@ pub async fn recon_full(input: ReconInput) -> Result<CombinedReconResult, String
         http_security: None,
         public_asset: None,
         threat_intel: None,
+        errors: Vec::new(),
     };
 
     // DNS recon (sync)

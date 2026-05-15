@@ -193,7 +193,7 @@ export function AIResultsPanel({ devices, risks, deepseekApiKey }: Props) {
             <span className="text-xs text-gray-400 truncate flex-1">{risk.title}</span>
             <button
               onClick={() => generateFix(risk)}
-              disabled={loading !== null}
+              disabled={loading === 'fix'}
               className="bg-slate-700 text-gray-300 px-2 py-0.5 rounded text-xs hover:bg-slate-600 disabled:opacity-50"
             >
               修复建议
@@ -213,7 +213,7 @@ export function AIResultsPanel({ devices, risks, deepseekApiKey }: Props) {
           <p className="text-gray-300 text-xs mb-2">{fixSuggestion.explanation}</p>
           <ol className="list-decimal list-inside text-gray-300 text-xs space-y-1">
             {fixSuggestion.steps.map((step, i) => (
-              <li key={i}>{step.replace('{}', selectedRisk.ip)}</li>
+              <li key={i}>{step.replace(/\{\}/g, selectedRisk.ip)}</li>
             ))}
           </ol>
           <p className="text-green-400 text-xs mt-2">验证: {fixSuggestion.verification}</p>

@@ -57,6 +57,7 @@ interface CombinedReconResult {
   http_security?: HttpSecurityReport;
   public_asset?: PublicAsset;
   threat_intel?: ThreatIntelResult;
+  errors?: string[];
 }
 
 interface Props {
@@ -96,7 +97,10 @@ export function ReconPanel({ target: defaultTarget, shodanApiKey }: Props) {
     setLoading('dns');
     try {
       const res = await invoke<DnsRecon>('recon_dns_recon', { target });
-      setResult(prev => prev ? { ...prev, dns: res } : { target, dns: res, subdomains: [] });
+      setResult(prev => prev
+        ? { ...prev, dns: res }
+        : { target, dns: res, subdomains: [], http_security: undefined, public_asset: undefined, threat_intel: undefined, errors: [] }
+      );
     } catch (e) { console.error('DNS recon failed:', e); }
     setLoading(null);
   };
@@ -112,11 +116,11 @@ export function ReconPanel({ target: defaultTarget, shodanApiKey }: Props) {
   };
 
   const runShodan = async () => {
-    if (!target || !shodanApiKey) return;
+    if (!target) return;
     setLoading('shodan');
     try {
       const res = await invoke<PublicAsset>('recon_query_shodan', {
-        apiKey: shodanApiKey,
+        apiKey: shodanApiKey || 'MOCK_KEY',
         ip: target,
       });
       setShodanResult(res);
@@ -194,7 +198,7 @@ export function ReconPanel({ target: defaultTarget, shodanApiKey }: Props) {
           className="bg-slate-700 text-gray-300 px-2 py-1 rounded text-xs hover:bg-slate-600 disabled:opacity-50">
           HTTP 审计
         </button>
-        <button onClick={runShodan} disabled={loading !== null || !target || !shodanApiKey}
+        <button onClick={runShodan} disabled={loading !== null || !target}
           className="bg-slate-700 text-gray-300 px-2 py-1 rounded text-xs hover:bg-slate-600 disabled:opacity-50">
           Shodan
         </button>
@@ -335,6 +339,15 @@ export function ReconPanel({ target: defaultTarget, shodanApiKey }: Props) {
               <p className="text-gray-400">{v.url}</p>
               <p className="text-gray-500">{v.evidence}</p>
             </div>
+          ))}
+        </div>
+      )}
+      {/* Errors */}
+      {result?.errors && result.errors.length > 0 && (
+        <div className="bg-red-900/20 rounded-lg p-3 border border-red-800">
+          <h4 className="text-red-400 text-xs font-semibold mb-1">部分步骤失败:</h4>
+          {result.errors.map((err, i) => (
+            <p key={i} className="text-red-300 text-xs">• {err}</p>
           ))}
         </div>
       )}
