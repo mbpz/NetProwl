@@ -1,48 +1,22 @@
 //! NetProwl Core Scanner Module
+//!
+//! Types Port / PortState / DeviceType are re-exported from rs-core (single authority).
+//! Device is PC-specific (different field contract).
 
-pub mod ip;
-pub mod oui;
-pub mod tcp;
-pub mod banner;
-pub mod registry;
-pub mod mdns;
-pub mod ssdp;
+pub mod ssdp;        // PC-native tokio UdpSocket implementation
+pub mod mdns;        // stub — TODO: implement with rs-core or trust-dns-resolver
 pub mod tool_discovery;
 pub mod os_fingerprint;
 
 pub use os_fingerprint::{OsFingerprint, OsType, detect_os};
 
+// ── Re-export from rs-core (single authority) ──
+
+pub use rs_core::types::{Port, PortState, DeviceType, DiscoverySource};
+
+// ── PC-specific Device (keeps existing field names for Tauri IPC compat) ──
+
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Port {
-    pub port: u16,
-    pub state: PortState,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub service: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub banner: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum PortState {
-    Open,
-    Closed,
-    Filtered,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum DeviceType {
-    Router,
-    Pc,
-    Camera,
-    Nas,
-    Phone,
-    Printer,
-    Unknown,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
@@ -59,6 +33,8 @@ pub struct Device {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub sources: Vec<String>,
 }
+
+// ── Port lists ──
 
 pub const WHITE_PORTS: &[u16] = &[80, 443, 8080, 8443, 554, 5000, 9000, 49152];
 

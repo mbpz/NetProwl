@@ -1,18 +1,26 @@
 /**
  * rs-core WASM loader
  *
- * Build: cd core && wasm-pack build --target web --out-dir pkg
- * Output: core/pkg/ (imported below as relative path)
+ * Build: cd rs-core && wasm-pack build --target web --out-dir pkg
+ * Output: rs-core/pkg/ (copied to ../wasm_pkg/ for mini program)
+ *
+ * NOTE: mDNS/SSDP/TCP networking functions return empty results in WASM.
+ * The mini program MUST use WeChat native APIs (wx.startLocalServiceDiscovery,
+ * wx.createUDPSocket, wx.createTCPSocket) for actual network discovery.
+ * WASM is only used for pure computation: OUI lookup, IP subnet math.
  */
 import init, {
   lookup_vendor,
   infer_subnet,
   expand_subnet,
+  guess_gateway,
+  is_private_ip,
   discover_mdns,
   discover_ssdp,
   probe_tcp_ports,
-  scan_network,
-} from '../../core/pkg'
+  grab_banner,
+  guess_service,
+} from '../wasm_pkg/rs_core'
 
 let initialized = false
 
@@ -45,19 +53,42 @@ export async function wasmExpandSubnet(subnet: string): Promise<string[]> {
   }
 }
 
-// ============== Discovery ==============
+export async function wasmGuessGateway(localIP: string): Promise<string> {
+  await ensureInit()
+  return guess_gateway(localIP)
+}
+
+export async function wasmIsPrivateIP(ip: string): Promise<boolean> {
+  await ensureInit()
+  return is_private_ip(ip)
+}
+
+// ============== Discovery (WASM stubs — use WeChat APIs in production) ==============
 
 export async function wasmDiscoverMDNS(serviceTypes: string[], timeoutMs: number): Promise<string> {
   await ensureInit()
-  return discover_mdns(JSON.stringify(serviceTypes), timeoutMs) as any
+  // NOTE: Returns empty on WASM. Replace with wx.startLocalServiceDiscovery in production.
+  return discover_mdns(serviceTypes as any, timeoutMs) as string
 }
 
 export async function wasmDiscoverSSDP(timeoutMs: number): Promise<string> {
   await ensureInit()
-  return discover_ssdp(timeoutMs) as any
+  // NOTE: Returns empty on WASM. Replace with wx.createUDPSocket in production.
+  return discover_ssdp(timeoutMs) as string
 }
 
 export async function wasmProbeTCPPorts(ip: string, ports: number[], timeoutMs: number): Promise<string> {
   await ensureInit()
-  return probe_tcp_ports(ip, JSON.stringify(ports), timeoutMs) as any
+  // NOTE: Returns empty on WASM. Replace with wx.createTCPSocket in production.
+  return probe_tcp_ports(ip, ports as any, timeoutMs) as string
+}
+
+export async function wasmGrabBanner(ip: string, port: number, timeoutMs: number): Promise<string> {
+  await ensureInit()
+  return grab_banner(ip, port, timeoutMs) as string
+}
+
+export async function wasmGuessService(port: number): Promise<string> {
+  await ensureInit()
+  return guess_service(port) as string
 }
