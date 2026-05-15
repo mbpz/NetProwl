@@ -93,12 +93,12 @@ async fn start_scan(opts: ScanOptions, state: tauri::State<'_, ScannerState>) ->
         let cfg = cfg.clone();
         handles.push(tokio::spawn(async move {
             let _permit = permit;
-            let ports = crate::scanner::tcp::probe_ports(&ip, cfg).await;
+            let ports = crate::scanner::tcp::probe_tcp_ports(&ip, cfg).await.unwrap_or_default();
             if ports.is_empty() {
                 None
             } else {
                 let ports = ports.into_iter().map(|mut p| {
-                    let (svc, _) = match_service(p.port, p.banner.as_deref());
+                    let (svc, _) = match_service(p.port, p.banner.as_deref().unwrap_or(""));
                     p.service = Some(svc.to_string());
                     p
                 }).collect();
@@ -176,11 +176,11 @@ async fn cancel_scan(state: tauri::State<'_, ScannerState>) -> Result<(), String
 // Report export command
 // ---------------------------------------------------------------------------
 
-fn with_history_db<T, F>(state: &ScannerState, f: F) -> Result<T, String>
+async fn with_history_db<T, F>(state: &ScannerState, f: F) -> Result<T, String>
 where
     F: FnOnce(&HistoryDb) -> Result<T, String>,
 {
-    let guard = state.db.lock().map_err(|e| e.to_string())?;
+    let guard = state.db.lock().await;
     f(&guard)
 }
 
@@ -194,7 +194,7 @@ async fn export_report(scan_id: i64, format: String, state: tauri::State<'_, Sca
             "csv" => Ok(report::export_csv(&full_report)),
             _ => Err("unsupported format, use json|html|csv".to_string()),
         }
-    })
+    }).await
 }
 
 #[tauri::command]
@@ -202,7 +202,7 @@ async fn export_session_json(session_id: i64, state: tauri::State<'_, ScannerSta
     with_history_db(&state, |db| {
         let detail = db.get_session_detail(session_id)?;
         serde_json::to_string_pretty(&detail).map_err(|e| e.to_string())
-    })
+    }).await
 }
 
 #[tauri::command]

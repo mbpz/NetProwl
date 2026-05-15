@@ -8,11 +8,24 @@ pub mod mdns;        // stub — TODO: implement with rs-core or trust-dns-resol
 pub mod tool_discovery;
 pub mod os_fingerprint;
 
+// ── Re-export rs-core scanner submodules for PC use ──
+pub mod ip {
+    pub use rs_core::ip::{expand_subnet, infer_subnet, guess_gateway, is_private, is_private_ip};
+}
+pub mod tcp {
+    pub use rs_core::scanner::tcp::{TCPConfig, probe_tcp_ports};
+    /// Alias for backward compat
+    pub type TcpConfig = TCPConfig;
+}
+pub mod registry {
+    pub use rs_core::scanner::registry::{match_service, guess_service};
+}
+
 pub use os_fingerprint::{OsFingerprint, OsType, detect_os};
 
 // ── Re-export from rs-core (single authority) ──
 
-pub use rs_core::types::{Port, PortState, DeviceType, DiscoverySource};
+pub use rs_core::{Port, PortState, DeviceType, DiscoverySource};
 
 // ── PC-specific Device (keeps existing field names for Tauri IPC compat) ──
 

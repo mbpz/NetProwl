@@ -7,7 +7,6 @@ use std::process::Command;
 pub struct Tool {
     pub name: &'static str,
     pub cmd: &'static str,
-    pub install_cmd: &'static str,
     pub version_flag: &'static str,
 }
 
@@ -45,6 +44,32 @@ pub struct ToolStatus {
     pub name: String,
     pub installed: bool,
     pub version: Option<String>,
+    pub install_hint: String,  // Platform-appropriate install command
+}
+
+/// Platform-specific install command for a tool
+fn install_hint(name: &str) -> String {
+    if cfg!(target_os = "macos") {
+        match name {
+            "masscan" => "brew install masscan".into(),
+            "nmap" => "brew install nmap".into(),
+            "rustscan" => "cargo install rustscan".into(),
+            "nuclei" => "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest".into(),
+            "ffuf" => "go install github.com/ffuf/ffuf/v2@latest".into(),
+            "feroxbuster" => "cargo install feroxbuster".into(),
+            _ => format!("Install {} manually", name),
+        }
+    } else {
+        match name {
+            "masscan" => "sudo apt install masscan".into(),
+            "nmap" => "sudo apt install nmap".into(),
+            "rustscan" => "cargo install rustscan".into(),
+            "nuclei" => "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest".into(),
+            "ffuf" => "go install github.com/ffuf/ffuf/v2@latest".into(),
+            "feroxbuster" => "cargo install feroxbuster".into(),
+            _ => format!("Install {} manually", name),
+        }
+    }
 }
 
 /// Check all known tools and return their status
@@ -62,6 +87,7 @@ pub fn check_all_tools() -> Vec<ToolStatus> {
                 name: tool.name.to_string(),
                 installed,
                 version,
+                install_hint: install_hint(tool.name),
             }
         })
         .collect()
@@ -72,37 +98,31 @@ pub static TOOLS: &[Tool] = &[
     Tool {
         name: "masscan",
         cmd: "masscan",
-        install_cmd: "apt install masscan",
         version_flag: "--version",
     },
     Tool {
         name: "nmap",
         cmd: "nmap",
-        install_cmd: "apt install nmap",
         version_flag: "--version",
     },
     Tool {
         name: "rustscan",
         cmd: "rustscan",
-        install_cmd: "cargo install rustscan",
         version_flag: "--version",
     },
     Tool {
         name: "nuclei",
         cmd: "nuclei",
-        install_cmd: "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest",
         version_flag: "-version",
     },
     Tool {
         name: "ffuf",
         cmd: "ffuf",
-        install_cmd: "go install github.com/ffuf/ffuf/v2@latest",
         version_flag: "-V",
     },
     Tool {
         name: "feroxbuster",
         cmd: "feroxbuster",
-        install_cmd: "cargo install feroxbuster",
         version_flag: "--version",
     },
 ];
@@ -113,14 +133,11 @@ mod tests {
 
     #[test]
     fn test_tool_detect() {
-        // Test with a tool that should exist (nmap or masscan likely)
         let tool = Tool {
             name: "masscan",
             cmd: "masscan",
-            install_cmd: "apt install masscan",
             version_flag: "--version",
         };
-        // Just verify detect doesn't panic
         let _ = tool.detect();
     }
 

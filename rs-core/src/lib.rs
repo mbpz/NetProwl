@@ -1,5 +1,5 @@
 mod types;
-mod ip;
+pub mod ip;
 mod oui;
 mod tcp;
 mod banner;

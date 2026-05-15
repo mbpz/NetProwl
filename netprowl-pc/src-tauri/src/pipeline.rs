@@ -69,6 +69,26 @@ fn https_url(ip: &str, port: u16) -> String {
     }
 }
 
+fn default_wordlist() -> String {
+    let candidates = if cfg!(target_os = "macos") {
+        [
+            "/usr/local/share/wordlists/dirb/common.txt",
+            "/opt/homebrew/share/wordlists/dirb/common.txt",
+        ]
+    } else {
+        [
+            "/usr/share/wordlists/dirb/common.txt",
+            "/usr/local/share/wordlists/dirb/common.txt",
+        ]
+    };
+    for p in &candidates {
+        if std::path::Path::new(p).exists() {
+            return p.to_string();
+        }
+    }
+    candidates[0].to_string()
+}
+
 pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<Vec<PipelineResult>, String> {
     let mut results = Vec::new();
     let port_range = opts.port_range.clone().unwrap_or_else(|| "1-1000".to_string());
@@ -155,13 +175,7 @@ pub async fn run_pipeline(opts: PipelineOptions, cancel: CancelToken) -> Result<
         }
     }
 
-    let wordlist = opts.wordlist.clone().unwrap_or_else(|| {
-        if cfg!(target_os = "macos") {
-            "/usr/local/share/wordlists/dirb/common.txt".to_string()
-        } else {
-            "/usr/share/wordlists/dirb/common.txt".to_string()
-        }
-    });
+    let wordlist = opts.wordlist.clone().unwrap_or_else(default_wordlist);
 
     if opts.auto_nuclei && !open_ports.is_empty() {
         let cancel = cancel.clone();
