@@ -6,24 +6,41 @@ on:
     paths:
       - 'netprowl-pc/**'
       - 'core/**'
+      - 'rs-core/**'
+      - 'netprowl-agent/**'
+    tags:
+      - 'v*'
   pull_request:
     paths:
       - 'netprowl-pc/**'
       - 'core/**'
-  release:
-    types: [published]
+      - 'rs-core/**'
 
 env:
   CARGO_INCREMENTAL: 0
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  # ── Tag push → full release with published=true (triggers bump-homebrew)
+  build-macos-release:
+    name: Build macOS ${{ matrix.arch }} (release)
+    runs-on: macos-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            target: aarch64-apple-darwin
+          - arch: x64
+            target: x86_64-apple-darwin
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -37,12 +54,68 @@ jobs:
           bun install --registry=https://registry.npmjs.org --insecure --insecure
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+        run: |
+          cd netprowl-pc
+          ./node_modules/.bin/tauri build --target ${{ matrix.target }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-macos:
-    name: Build macOS ${{ matrix.arch }}
+      - name: Find .app bundle
+        id: find-app
+        run: |
+          APP_PATH=$(find src-tauri/target/${{ matrix.target }}/release/bundle/macos -name "*.app" -type d | head -1)
+          echo "app_path=$APP_PATH" >> $GITHUB_OUTPUT
+
+      - name: Ad-hoc sign and clear quarantine
+        run: |
+          APP_PATH="${{ steps.find-app.outputs.app_path }}"
+          codesign --force --deep --sign - "$APP_PATH"
+          xattr -rd com.apple.quarantine "$APP_PATH"
+
+      - name: Package as tar.gz
+        run: |
+          APP_PATH="${{ steps.find-app.outputs.app_path }}"
+          APP_NAME=$(basename "$APP_PATH")
+          cd $(dirname "$APP_PATH")
+          tar -czvf "NetProwl-${{ matrix.arch }}.tar.gz" "$APP_NAME"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netprowl-release-${{ matrix.arch }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/macos/NetProwl-${{ matrix.arch }}.tar.gz
+          retention-days: 7
+
+  create-github-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-macos-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: NetProwl ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/netprowl-release-arm64/*.tar.gz
+            artifacts/netprowl-release-x64/*.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Push to main → dev release (draft + prerelease)
+  build-macos-dev:
+    name: Build macOS ${{ matrix.arch }} (dev)
     runs-on: macos-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     strategy:
@@ -85,16 +158,12 @@ jobs:
         run: |
           APP_PATH=$(find src-tauri/target/${{ matrix.target }}/release/bundle/macos -name "*.app" -type d | head -1)
           echo "app_path=$APP_PATH" >> $GITHUB_OUTPUT
-          echo "Found app at: $APP_PATH"
 
       - name: Ad-hoc sign and clear quarantine
         run: |
           APP_PATH="${{ steps.find-app.outputs.app_path }}"
-          echo "Signing: $APP_PATH"
           codesign --force --deep --sign - "$APP_PATH"
-          echo "Clearing quarantine..."
           xattr -rd com.apple.quarantine "$APP_PATH"
-          echo "Done."
 
       - name: Package as tar.gz
         run: |
@@ -102,22 +171,19 @@ jobs:
           APP_NAME=$(basename "$APP_PATH")
           cd $(dirname "$APP_PATH")
           tar -czvf "NetProwl-${{ matrix.arch }}.tar.gz" "$APP_NAME"
-          ls -lh "NetProwl-${{ matrix.arch }}.tar.gz"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: netprowl-macos-${{ matrix.arch }}
+          name: netprowl-dev-${{ matrix.arch }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/macos/NetProwl-${{ matrix.arch }}.tar.gz
           retention-days: 7
 
-  create-release:
-    name: Create Release
+  create-dev-release:
+    name: Create Dev Release
     runs-on: ubuntu-latest
-    needs: build-macos
+    needs: build-macos-dev
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    outputs:
-      tag_name: ${{ steps.tag.outputs.tag_name }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,26 +198,46 @@ jobs:
           git tag "$TAG_NAME"
           git push origin "$TAG_NAME"
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-          echo "Created tag: $TAG_NAME"
 
-  assemble-release:
-    name: Assemble Release
-    runs-on: ubuntu-latest
-    needs: [build-macos, create-release]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: Create Release
+      - name: Create Draft Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.create-release.outputs.tag_name }}
-          name: ${{ needs.create-release.outputs.tag_name }}
-          files: artifacts/netprowl-macos-arm64/*.tar.gz artifacts/netprowl-macos-x64/*.tar.gz
+          tag_name: ${{ steps.tag.outputs.tag_name }}
+          name: ${{ steps.tag.outputs.tag_name }}
+          files: |
+            artifacts/netprowl-dev-arm64/*.tar.gz
+            artifacts/netprowl-dev-x64/*.tar.gz
           draft: true
           prerelease: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Linux build (unchanged)
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: |
+          unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY no_proxy NO_PROXY
+          cd netprowl-pc
+          bun install --registry=https://registry.npmjs.org --insecure --insecure
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
