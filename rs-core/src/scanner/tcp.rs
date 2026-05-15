@@ -121,7 +121,11 @@ pub fn probe_tcp_ports_sync(ip: &str, cfg: TCPConfig) -> Vec<Port> {
     let mut open_ports = Vec::new();
     for port in &cfg.ports {
         let addr = format!("{}:{}", ip, port);
-        if let Ok(mut conn) = std::net::TcpStream::connect_timeout(&addr.parse().unwrap(), timeout) {
+        let sock_addr = match addr.parse() {
+            Ok(a) => a,
+            Err(_) => continue,
+        };
+        if let Ok(mut conn) = std::net::TcpStream::connect_timeout(&sock_addr, timeout) {
             conn.set_read_timeout(Some(Duration::from_secs(1))).ok();
             let banner = grab_banner_sync(&mut conn, *port);
             open_ports.push(Port {

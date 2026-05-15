@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use tokio::sync::Mutex;
 
 mod commands;
 mod pipeline;
@@ -131,15 +131,15 @@ async fn start_scan(opts: ScanOptions, state: tauri::State<'_, ScannerState>) ->
         all_devices.extend(mdns);
     }
 
-    let mut state_devices = state.devices.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+    let mut state_devices = state.devices.lock().await;
     *state_devices = all_devices.clone();
 
     Ok(all_devices)
 }
 
 #[tauri::command]
-fn get_devices(state: tauri::State<'_, ScannerState>) -> Result<Vec<Device>, String> {
-    let devices = state.devices.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+async fn get_devices(state: tauri::State<'_, ScannerState>) -> Result<Vec<Device>, String> {
+    let devices = state.devices.lock().await;
     Ok(devices.clone())
 }
 
@@ -152,20 +152,20 @@ fn check_tool_status() -> Vec<ToolStatus> {
 async fn start_pipeline(opts: PipelineOptions, state: tauri::State<'_, ScannerState>) -> Result<Vec<PipelineResult>, String> {
     let cancel = CancelToken::new();
     {
-        let mut token = state.cancel_token.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+        let mut token = state.cancel_token.lock().await;
         *token = Some(cancel.clone());
     }
     let result = pipeline::run_pipeline(opts, cancel).await;
     {
-        let mut token = state.cancel_token.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+        let mut token = state.cancel_token.lock().await;
         *token = None;
     }
     result
 }
 
 #[tauri::command]
-fn cancel_scan(state: tauri::State<'_, ScannerState>) -> Result<(), String> {
-    let token = state.cancel_token.lock().map_err(|e: std::sync::PoisonError<_>| e.to_string())?;
+async fn cancel_scan(state: tauri::State<'_, ScannerState>) -> Result<(), String> {
+    let token = state.cancel_token.lock().await;
     if let Some(t) = token.as_ref() {
         t.cancel();
     }

@@ -137,7 +137,10 @@ async fn grab_generic_banner(conn: &mut TcpStream, _timeout_dur: TDuration) -> R
 pub fn grab_banner_sync(ip: &str, port: u16, cfg: BannerConfig) -> String {
     let timeout = std::time::Duration::from_millis(cfg.timeout_ms);
     let addr = format!("{}:{}", ip, port);
-    let mut conn = match std::net::TcpStream::connect_timeout(&addr.parse().unwrap_or_else(|_| "127.0.0.1:80".parse().unwrap()), timeout) {
+    let mut conn = match std::net::TcpStream::connect_timeout(
+        &addr.parse().unwrap_or_else(|_| std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 80))),
+        timeout,
+    ) {
         Ok(c) => c,
         Err(_) => return String::new(),
     };

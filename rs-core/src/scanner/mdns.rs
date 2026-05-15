@@ -1,5 +1,5 @@
 use crate::types::{Device, DeviceType, DiscoverySource, OSType, Port, PortState};
-use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr};
 use std::time::Duration;
 
 const MDNS_ADDR: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
@@ -28,23 +28,74 @@ impl Default for MDNSConfig {
     }
 }
 
+// ── Async version (native, uses tokio::net::UdpSocket) ──
+
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn discover_mdns(cfg: MDNSConfig) -> Result<Vec<Device>, Box<dyn std::error::Error + Send + Sync>> {
-    Ok(discover_mdns_sync(cfg))
+    use std::net::UdpSocket;
+    use tokio::net::UdpSocket as TokioUdpSocket;
+
+    // Bind + configure via std socket, then convert to tokio for async I/O
+    let std_socket = UdpSocket::bind(SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, 0)))?;
+    std_socket.join_multicast_v4(&MDNS_ADDR, &std::net::Ipv4Addr::UNSPECIFIED)?;
+    std_socket.set_nonblocking(true)?;
+    let socket = TokioUdpSocket::from_std(std_socket)?;
+
+    // Send queries
+    for st in &cfg.service_types {
+        let query = build_mdns_query(st);
+        let _ = tokio::time::timeout(
+            Duration::from_secs(1),
+            socket.send_to(&query, SocketAddr::from((MDNS_ADDR, MDNS_PORT))),
+        )
+        .await;
+    }
+
+    // Collect responses with timeout
+    let mut devices = Vec::new();
+    let mut buf = vec![0u8; 65536];
+    let deadline = tokio::time::Instant::now() + cfg.timeout;
+
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match tokio::time::timeout(remaining, socket.recv_from(&mut buf)).await {
+            Ok(Ok((n, src))) => {
+                if let Some(dev) = parse_mdns_response(&buf[..n], src.ip().to_string()) {
+                    devices.push(dev);
+                }
+            }
+            _ => break,
+        }
+    }
+
+    Ok(devices)
 }
 
+// ── Sync version (fallback / WASM) ──
+
 pub fn discover_mdns_sync(cfg: MDNSConfig) -> Vec<Device> {
-    let socket = match UdpSocket::bind(SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, 0))) {
+    let socket = match std::net::UdpSocket::bind(SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, 0))) {
         Ok(s) => s,
         Err(_) => return vec![],
     };
-    if socket.set_read_timeout(Some(cfg.timeout)).is_err() { return vec![]; }
-    if socket.join_multicast_v4(&MDNS_ADDR, &std::net::Ipv4Addr::UNSPECIFIED).is_err() { return vec![]; }
+    if socket.set_read_timeout(Some(cfg.timeout)).is_err() {
+        return vec![];
+    }
+    if socket.join_multicast_v4(&MDNS_ADDR, &std::net::Ipv4Addr::UNSPECIFIED).is_err() {
+        return vec![];
+    }
 
     let mut devices = Vec::new();
 
     for st in &cfg.service_types {
         let query = build_mdns_query(st);
-        if socket.send_to(&query, SocketAddr::from((MDNS_ADDR, MDNS_PORT))).is_err() {
+        if socket
+            .send_to(&query, SocketAddr::from((MDNS_ADDR, MDNS_PORT)))
+            .is_err()
+        {
             continue;
         }
     }
@@ -63,6 +114,8 @@ pub fn discover_mdns_sync(cfg: MDNSConfig) -> Vec<Device> {
     }
     devices
 }
+
+// ── DNS helpers ──
 
 fn build_mdns_query(service_type: &str) -> Vec<u8> {
     let mut buf = Vec::with_capacity(512);

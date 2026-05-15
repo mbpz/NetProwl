@@ -5,24 +5,29 @@
 
 **架构原则**：
 
-1. **Phase 1 双版本并行**
-   - 微信小程序版（netprowl-mini/）：Taro + React，Rust WASM 受微信 API 限制
+1. **双版本并行**
+   - 微信小程序版（netprowl-mini/）：Taro + React，微信原生 API（mDNS/TCP/UDP），WASM 仅用于纯计算（OUI/IP）
    - PC 客户端版（netprowl-pc/）：Tauri + React，Rust 原生全部功能
 
-2. **Rust 核心统一**（core/）
-   - mDNS / UDP SSDP / TCP 扫描 / Banner 抓取 / OUI / 服务指纹
-   - 两版本前端独立，核心能力复用
-   - PC：src-tauri/src 直接调用 core（native）
-   - 小程序：wasm-pack 编译 core 为 WASM 调用
+2. **Rust 核心统一**（rs-core/）
+   - 唯一权威 Rust 核心库
+   - 模块：scanner（mDNS/UDP SSDP/TCP/Banner/Registry）+ ip/oui/consts/types
+   - Phase 2+ 模块：ai/（攻击链、诊断、修复建议、Banner 解析）、cve/（CVE 数据库）、
+     security/（凭据检测、固件、TLS 审计、未授权访问）、recon/（Shodan/FOFA/DNS/HTTP 审计/WAF/威胁情报）
+   - PC：src-tauri/src 通过 thin wrapper 调用 rs-core
+   - 小程序：wasm-pack 编译 rs-core 为 WASM（仅纯计算函数，网络函数仅 native）
 
-3. **Phase 2+ 才引入**
-   - Probe Agent（可选部署）
-   - 云端中台（DeepSeek AI / CVE 库）
+3. **实际 Phase 进展（2026-05-15）**
+   - Phase 1（局域网服务发现）：✅ 完成 — mDNS/SSDP/TCP/Banner/服务指纹/OUI
+   - Phase 2（服务指纹与协议识别）：✅ 完成 — 服务指纹规则库 / TLS 审计 / AI Banner 解析 / CVE 库
+   - Phase 3（安全弱点检测）：✅ 完成 — 默认凭据检测 / TLS 审计 / 未授权访问 / 固件风险评估 / 报告导出
+   - Phase 4（公网侦察）：✅ 完成 — Shodan/FOFA / DNS 侦察 / HTTP 安全头审计 / WAF/CDN 检测 / 威胁情报
+   - Probe Agent：未实现（Phase 2+ 可选方案）
 
 **禁止**：
-- 引入与规格书不符的架构（如旧 probe-agent/、cloud/）
-- 在 Phase 1 做 Phase 2+ 的功能
-- 破坏双版本并行结构
+- 引入 `core/` 目录（已删除，rs-core 是唯一核心库）
+- 在 PC scanner 中重复实现 rs-core 已有模块（已收敛为 thin wrapper）
+- 在 WASM 中导出网络扫描函数（WASM 仅用于纯计算）
 
 **开发流程**：
 1. 读规格书
