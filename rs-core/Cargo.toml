@@ -31,6 +31,7 @@ reqwest = { version = "0.12", features = ["json", "blocking"] }
 tokio = { version = "1", features = ["full"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 trust-dns-resolver = "0.23"
+socket2 = "0.6"
 
 [dev-dependencies]
 wasm-pack = "0.13"

@@ -2,7 +2,9 @@
 
 **网络安全工具** — 从 CLI 到桌面，内外网统一发现与安全检测。
 
-**当前版本**：v1.0.0 — Phase 1-4 全部完成
+**当前版本**：v1.0.0 — PC 端核心闭环完成；小程序端 Phase 1 能力具备原生 API 入口与 WASM 兜底；Phase 2-4 以 PC 端为主持续验收。
+
+当前状态以本地/CI loop 的验证结果为准；Roadmap 是目标规划，不等同于完成度声明。
 
 ```
 发展阶段：
@@ -22,8 +24,8 @@
 | Banner 抓取 | ❌ | ✅ |
 | 服务指纹 | ❌ | ✅ |
 | 漏洞检测 | ❌ | ✅ nuclei / ffuf / feroxbuster |
-| TLS 审计 | ❌ | ✅ rustls + testssl.sh |
-| 扫描历史 | ❌ (10MB) | ✅ SQLite |
+| TLS 审计 | ❌ | ✅ rustls（testssl.sh 可选） |
+| 扫描历史 | ✅ Storage (10MB / 50 snapshots) | ✅ SQLite |
 | 报告导出 | ❌ | ✅ |
 
 ## 技术栈
@@ -93,6 +95,14 @@ npm run build
 ```
 
 该循环会先运行可靠性循环，再检查 Rust Core、PC 客户端和小程序端关键功能入口是否具备可执行实现证据。
+
+检查 roadmap、README 与源码完成度声明是否一致时运行代码审查闭环：
+
+```bash
+./scripts/roadmap-readme-code-review-loop.sh
+```
+
+该循环会先运行功能完成度闭环，再拒绝文档中的过度完成声明、源码中的硬性未实现标记，以及 README 与 roadmap 的关键口径漂移。
 
 小程序端依赖安装后，可单独运行构建闭环：
 

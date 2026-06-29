@@ -3375,6 +3375,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
+ "socket2",
  "tokio",
  "trust-dns-resolver",
  "urlencoding",

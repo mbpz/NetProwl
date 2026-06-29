@@ -4,7 +4,7 @@
 //! Device is PC-specific (different field contract).
 
 pub mod ssdp;        // PC-native tokio UdpSocket implementation
-pub mod mdns;        // stub — TODO: implement with rs-core or trust-dns-resolver
+pub mod mdns;        // shared rs-core multicast implementation
 pub mod tool_discovery;
 pub mod os_fingerprint;
 

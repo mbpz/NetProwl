@@ -32,12 +32,11 @@ impl Default for MDNSConfig {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn discover_mdns(cfg: MDNSConfig) -> Result<Vec<Device>, Box<dyn std::error::Error + Send + Sync>> {
-    use std::net::UdpSocket;
     use tokio::net::UdpSocket as TokioUdpSocket;
 
-    // Bind + configure via std socket, then convert to tokio for async I/O
-    let std_socket = UdpSocket::bind(SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, 0)))?;
-    std_socket.join_multicast_v4(&MDNS_ADDR, &std::net::Ipv4Addr::UNSPECIFIED)?;
+    // mDNS multicast responses are sent to 224.0.0.251:5353, so listen on
+    // the service port with address reuse instead of an ephemeral source port.
+    let std_socket = bind_mdns_socket()?;
     std_socket.set_nonblocking(true)?;
     let socket = TokioUdpSocket::from_std(std_socket)?;
 
@@ -77,14 +76,11 @@ pub async fn discover_mdns(cfg: MDNSConfig) -> Result<Vec<Device>, Box<dyn std::
 // ── Sync version (fallback / WASM) ──
 
 pub fn discover_mdns_sync(cfg: MDNSConfig) -> Vec<Device> {
-    let socket = match std::net::UdpSocket::bind(SocketAddr::from((std::net::Ipv4Addr::UNSPECIFIED, 0))) {
+    let socket = match bind_mdns_socket() {
         Ok(s) => s,
         Err(_) => return vec![],
     };
     if socket.set_read_timeout(Some(cfg.timeout)).is_err() {
-        return vec![];
-    }
-    if socket.join_multicast_v4(&MDNS_ADDR, &std::net::Ipv4Addr::UNSPECIFIED).is_err() {
         return vec![];
     }
 
@@ -113,6 +109,20 @@ pub fn discover_mdns_sync(cfg: MDNSConfig) -> Vec<Device> {
         }
     }
     devices
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn bind_mdns_socket() -> Result<std::net::UdpSocket, Box<dyn std::error::Error + Send + Sync>> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    use std::net::{SocketAddrV4, UdpSocket};
+
+    let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+    socket.set_reuse_address(true)?;
+    socket.bind(&SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, MDNS_PORT).into())?;
+
+    let std_socket: UdpSocket = socket.into();
+    std_socket.join_multicast_v4(&MDNS_ADDR, &Ipv4Addr::UNSPECIFIED)?;
+    Ok(std_socket)
 }
 
 // ── DNS helpers ──
