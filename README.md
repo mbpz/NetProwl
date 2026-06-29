@@ -94,6 +94,12 @@ npm run build
 
 该循环会先运行可靠性循环，再检查 Rust Core、PC 客户端和小程序端关键功能入口是否具备可执行实现证据。
 
+小程序端依赖安装后，可单独运行构建闭环：
+
+```bash
+./scripts/mini-build-loop.sh
+```
+
 ### 小程序版
 
 ```bash

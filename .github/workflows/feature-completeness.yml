@@ -42,3 +42,39 @@ jobs:
 
       - name: Run feature completeness loop
         run: ./scripts/feature-completeness-loop.sh
+
+  mini-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@wasm-pack
+
+      - name: Install wasm target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Build WASM
+        run: wasm-pack build rs-core --target web --out-dir pkg
+
+      - name: Copy WASM package into mini program
+        run: |
+          rm -rf netprowl-mini/src/wasm_pkg
+          mkdir -p netprowl-mini/src/wasm_pkg
+          cp -R rs-core/pkg/. netprowl-mini/src/wasm_pkg/
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install mini dependencies
+        run: npm install --force
+        working-directory: netprowl-mini
+
+      - name: Build mini program
+        run: ../scripts/mini-build-loop.sh
+        working-directory: netprowl-mini
