@@ -1,15 +1,6 @@
 //! Tauri commands — history, pipeline, and tool management.
 
-use tauri::State;
-use crate::{ScannerState, history::HistoryDb, Device};
-
-async fn with_db_async<T, F>(state: &ScannerState, f: F) -> Result<T, String>
-where
-    F: FnOnce(&HistoryDb) -> Result<T, String>,
-{
-    let guard = state.db.lock().await;
-    f(&guard)
-}
+use crate::{Device, ScannerState};
 
 #[tauri::command]
 pub async fn start_scan_session(target: String, state: tauri::State<'_, ScannerState>) -> Result<i64, String> {

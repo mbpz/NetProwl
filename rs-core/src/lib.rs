@@ -1,11 +1,6 @@
 mod types;
 pub mod ip;
 mod oui;
-mod tcp;
-mod banner;
-mod registry;
-mod mdns;
-mod ssdp;
 pub mod scanner;
 pub mod util;
 pub mod consts;

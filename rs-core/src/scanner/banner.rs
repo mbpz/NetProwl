@@ -1,5 +1,4 @@
 use std::io::{Read, Write};
-use std::time::Duration;
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(not(target_arch = "wasm32"))]

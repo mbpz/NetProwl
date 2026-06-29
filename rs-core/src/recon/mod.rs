@@ -79,7 +79,6 @@ pub use threat_intel::{
 };
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Recon summary for a domain or IP
 #[derive(Debug, Clone, Serialize, Deserialize)]

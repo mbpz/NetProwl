@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Result structure for public reconnaissance APIs (Shodan/FOFA)
 #[derive(Debug, Clone, Serialize, Deserialize)]

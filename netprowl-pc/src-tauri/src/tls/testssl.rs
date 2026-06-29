@@ -1,6 +1,7 @@
 use std::process::Command;
 use super::TLSVulnerability;
 
+#[allow(dead_code)]
 pub fn run_testssl(host: &str, port: u16) -> Result<Vec<TLSVulnerability>, String> {
     // Check if testssl.sh exists
     if which::which("testssl.sh").is_err() {

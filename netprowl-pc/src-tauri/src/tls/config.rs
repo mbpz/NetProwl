@@ -83,7 +83,7 @@ pub fn check_tls_config(host: &str, port: u16) -> Result<TLSConfigInfo, String> 
             Err(_) => continue,
         };
 
-        let mut sock = match TcpStream::connect(format!("{}:{}", host, port)) {
+        let sock = match TcpStream::connect(format!("{}:{}", host, port)) {
             Ok(s) => s,
             Err(_) => continue,
         };
@@ -122,7 +122,7 @@ pub fn check_tls_config(host: &str, port: u16) -> Result<TLSConfigInfo, String> 
             Err(_) => return Ok(info),
         };
 
-        let mut sock = match TcpStream::connect(format!("{}:{}", host, port)) {
+        let sock = match TcpStream::connect(format!("{}:{}", host, port)) {
             Ok(s) => s,
             Err(_) => return Ok(info),
         };

@@ -1,12 +1,14 @@
 //! OS fingerprint inference from TTL and open ports
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct OsFingerprint {
     pub os: OsType,
     pub confidence: f32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum OsType {
     Linux,
     Windows,
@@ -23,6 +25,7 @@ pub enum OsType {
 ///   - 64: Linux, macOS, iOS, Android
 ///   - 128: Windows
 ///   - 255: Network device (router/switch)
+#[allow(dead_code)]
 pub fn detect_os(ttl: u8, open_ports: &[u16]) -> OsFingerprint {
     if ttl == 0 {
         return OsFingerprint {
@@ -32,7 +35,7 @@ pub fn detect_os(ttl: u8, open_ports: &[u16]) -> OsFingerprint {
     }
 
     // Primary inference from TTL
-    let (os, mut base_confidence): (OsType, f32) = if ttl <= 64 {
+    let (os, base_confidence): (OsType, f32) = if ttl <= 64 {
         (OsType::Linux, 0.7)
     } else if ttl <= 128 {
         (OsType::Windows, 0.7)

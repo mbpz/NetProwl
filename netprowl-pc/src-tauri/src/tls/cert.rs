@@ -1,5 +1,4 @@
 use rustls::{ClientConfig, ClientConnection, StreamOwned, DigitallySignedStruct, SignatureScheme};
-use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 use x509_parser::prelude::*;
@@ -61,12 +60,12 @@ pub fn fetch_cert_info(host: &str, port: u16) -> Result<TLSCertInfo, String> {
     let conn = ClientConnection::new(Arc::new(config), host_owned.try_into().map_err(|e| format!("{:?}", e))?)
         .map_err(|e| e.to_string())?;
 
-    let mut sock = TcpStream::connect(format!("{}:{}", host, port))
+    let sock = TcpStream::connect(format!("{}:{}", host, port))
         .map_err(|e| format!("tcp connect failed: {}", e))?;
     sock.set_read_timeout(Some(std::time::Duration::from_secs(5)))
         .map_err(|e| e.to_string())?;
 
-    let mut tls_stream = StreamOwned::new(conn, sock);
+    let tls_stream = StreamOwned::new(conn, sock);
 
     let cert_der = tls_stream.conn.peer_certificates()
         .and_then(|certs| certs.first())

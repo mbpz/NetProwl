@@ -1,0 +1,44 @@
+name: Feature Completeness Loop
+
+on:
+  pull_request:
+    paths:
+      - "rs-core/**"
+      - "netprowl-pc/**"
+      - "netprowl-mini/**"
+      - "scripts/**"
+      - ".github/workflows/feature-completeness.yml"
+  push:
+    branches: [main]
+    paths:
+      - "rs-core/**"
+      - "netprowl-pc/**"
+      - "netprowl-mini/**"
+      - "scripts/**"
+      - ".github/workflows/feature-completeness.yml"
+
+env:
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  feature-completeness:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: netprowl-pc/package-lock.json
+
+      - name: Install PC dependencies
+        run: npm ci
+        working-directory: netprowl-pc
+
+      - name: Run feature completeness loop
+        run: ./scripts/feature-completeness-loop.sh

@@ -71,8 +71,6 @@ pub fn is_scanner_ip(ip: &str) -> bool {
 
 /// Check if IP is in internal range (exposed to internet incorrectly)
 pub fn is_exposed_internal(ip: &str) -> bool {
-    use std::net::IpAddr;
-
     // Simple check for well-known internal ranges
     if ip.starts_with("10.") ||
        ip.starts_with("172.16.") || ip.starts_with("172.17.") ||
@@ -160,7 +158,7 @@ pub fn match_community_rules(banner: &str) -> Vec<DeviceFingerprintRule> {
     matches
 }
 
-/// User submitted reports storage (in-memory for Phase 1)
+// User submitted reports storage (in-memory for Phase 1)
 lazy_static::lazy_static! {
     static ref USER_REPORTS: std::sync::Mutex<Vec<ThreatReport>> = std::sync::Mutex::new(Vec::new());
 }

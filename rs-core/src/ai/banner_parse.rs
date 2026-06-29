@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use regex::Regex;
-use std::collections::HashMap;
 
 /// Banner analysis result
 #[derive(Debug, Clone, Serialize, Deserialize)]

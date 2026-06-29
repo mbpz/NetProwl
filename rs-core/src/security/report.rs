@@ -70,19 +70,6 @@ fn convert_firmware_risk(r: FirmwareRiskLevel) -> RiskLevel {
     }
 }
 
-/// Base score component weights for simplified CVSS
-#[derive(Debug, Clone)]
-struct CvssComponents {
-    attack_vector: f64,      // 0.0-1.0 (Network=1.0, Adjacent=0.646, Local=0.395, Physical=0.200)
-    attack_complexity: f64,  // 0.0-1.0 (Low=0.77, High=0.44)
-    privileges_required: f64,// 0.0-1.0 (None=0.85, Low=0.62, High=0.27)
-    user_interaction: f64,    // 0.0-1.0 (None=0.85, Required=0.62)
-    scope_unchanged: f64,    // 0.0-1.0 (Unchanged=1.0, Changed=1.15)
-    confidentiality: f64,     // 0.0-1.0 (None=0, Low=0.22, High=0.56)
-    integrity: f64,           // 0.0-1.0 (None=0, Low=0.22, High=0.56)
-    availability: f64,        // 0.0-1.0 (None=0, Low=0.22, High=0.56)
-}
-
 /// CVSS score and severity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CvssScore {

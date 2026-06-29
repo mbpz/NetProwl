@@ -75,6 +75,7 @@ pub fn insert_cves(conn: &Connection, cves: &[CveRule]) -> Result<()> {
 /// Simple version comparison: check if version falls within [version_min, version_max]
 /// Supports major.minor as floats (e.g. "1.2.3" -> 1.2, "2.0" -> 2.0, "10.0.1" -> 10.0).
 /// String fallback for non-numeric versions.
+#[cfg(test)]
 fn version_in_range(version: &str, version_min: &str, version_max: &str) -> bool {
     // Try float extraction: split on dots, compare major.minor as floats
     if let (Some(v), Some(min), Some(max)) = (
@@ -92,6 +93,7 @@ fn version_in_range(version: &str, version_min: &str, version_max: &str) -> bool
 
 /// Parse version to major.minor as f64.
 /// "1.2.3" -> 1.2, "2.0" -> 2.0, "10.0.1" -> 10.0, "abc" -> None (uses string fallback)
+#[cfg(test)]
 fn parse_version(v: &str) -> Option<f64> {
     let s = v.trim_start_matches('v');
     let parts: Vec<&str> = s.split('.').collect();

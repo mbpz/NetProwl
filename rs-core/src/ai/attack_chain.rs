@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashSet;
 
 /// Vulnerability for AI attack chain analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]

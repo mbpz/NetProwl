@@ -76,6 +76,24 @@ npm run dev
 npm run build
 ```
 
+## 可靠性循环
+
+核心功能改动前后运行同一个本地/CI 闭环：
+
+```bash
+./scripts/reliability-loop.sh
+```
+
+该循环覆盖 `rs-core` 单元测试、PC Tauri 后端单元测试，以及 PC 前端类型检查和构建。
+
+检查功能完成度时运行更高一层的验收闭环：
+
+```bash
+./scripts/feature-completeness-loop.sh
+```
+
+该循环会先运行可靠性循环，再检查 Rust Core、PC 客户端和小程序端关键功能入口是否具备可执行实现证据。
+
 ### 小程序版
 
 ```bash

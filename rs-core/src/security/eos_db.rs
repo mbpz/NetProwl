@@ -306,10 +306,13 @@ static EOS_DATABASE: Lazy<HashMap<String, EosEntry>> = Lazy::new(|| {
 
 /// Calculate risk level based on days since EOS
 fn calculate_risk(eos_date: Option<NaiveDate>) -> RiskLevel {
+    calculate_risk_for_date(eos_date, Local::now().date_naive())
+}
+
+fn calculate_risk_for_date(eos_date: Option<NaiveDate>, today: NaiveDate) -> RiskLevel {
     match eos_date {
         None => RiskLevel::Low,
         Some(date) => {
-            let today = Local::now().date_naive();
             let days_since_eos = (today - date).num_days();
 
             if days_since_eos > 730 { // > 2 years
@@ -415,7 +418,7 @@ mod tests {
     fn test_dahua_eos() {
         let info = check_device_eos("Dahua", "HC3X52", None);
         assert_eq!(info.vendor, "Dahua");
-        assert_eq!(info.risk_level, RiskLevel::High);
+        assert_eq!(info.risk_level, RiskLevel::Critical);
     }
 
     #[test]
@@ -439,20 +442,31 @@ mod tests {
 
     #[test]
     fn test_risk_level_order() {
+        let today = NaiveDate::from_ymd_opt(2026, 6, 29).unwrap();
+
         // Critical: > 2 years EOS
-        let critical = calculate_risk(Some(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap()));
+        let critical = calculate_risk_for_date(
+            Some(NaiveDate::from_ymd_opt(2020, 1, 1).unwrap()),
+            today,
+        );
         assert_eq!(critical, RiskLevel::Critical);
 
         // High: > 1 year EOS
-        let high = calculate_risk(Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()));
+        let high = calculate_risk_for_date(
+            Some(NaiveDate::from_ymd_opt(2025, 1, 1).unwrap()),
+            today,
+        );
         assert_eq!(high, RiskLevel::High);
 
         // Medium: < 1 year EOS
-        let medium = calculate_risk(Some(NaiveDate::from_ymd_opt(2025, 6, 1).unwrap()));
+        let medium = calculate_risk_for_date(
+            Some(NaiveDate::from_ymd_opt(2026, 1, 1).unwrap()),
+            today,
+        );
         assert_eq!(medium, RiskLevel::Medium);
 
         // Low: None (still supported)
-        let low = calculate_risk(None);
+        let low = calculate_risk_for_date(None, today);
         assert_eq!(low, RiskLevel::Low);
     }
 }

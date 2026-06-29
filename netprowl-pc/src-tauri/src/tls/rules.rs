@@ -1,22 +1,6 @@
-use serde::Deserialize;
 use crate::tls::TLSVulnerability;
 
-#[derive(Debug, Deserialize)]
-pub struct VulnRule {
-    pub id: String,
-    pub name: String,
-    pub severity: String,
-    pub description: String,
-}
-
-const EMBEDDED_RULES: &str = include_str!("../tls_vuln_rules.json");
-
-pub fn load_vuln_rules() -> Vec<VulnRule> {
-    serde_json::from_str(EMBEDDED_RULES).unwrap_or_default()
-}
-
 pub fn check_vulnerabilities(config: &super::TLSConfigInfo, cert: &super::TLSCertInfo) -> Vec<TLSVulnerability> {
-    let rules = load_vuln_rules();
     let mut vulns = Vec::new();
 
     // TLS 1.0/1.1 known issues

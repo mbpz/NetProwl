@@ -229,7 +229,7 @@ fn years_since(year: i64) -> i64 {
 }
 
 /// Find EOS entry by brand and model pattern
-pub fn find_eos_entry(brand: &str, model: &str) -> Option<&'static EosEntry> {
+fn find_eos_entry(brand: &str, model: &str) -> Option<&'static EosEntry> {
     let brand_lower = brand.to_lowercase();
     let model_lower = model.to_lowercase();
 

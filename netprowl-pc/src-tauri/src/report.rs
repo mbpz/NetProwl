@@ -1,7 +1,7 @@
 //! Report generation for scan history.
 
 use crate::history::HistoryDb;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize)]

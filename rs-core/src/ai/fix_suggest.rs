@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use crate::security::report::SecurityRisk;
 
 /// Fix suggestion for a security finding
@@ -321,6 +320,7 @@ fn detect_brand(title: &str, description: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_fix_suggestion_for_default_creds() {
